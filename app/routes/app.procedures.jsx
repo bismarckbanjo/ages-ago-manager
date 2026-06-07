@@ -1,22 +1,6 @@
 import { useState, useEffect } from "react";
 import { json } from "react-router";
 import { authenticate } from "../shopify.server";
-import {
-  Card,
-  Layout,
-  Page,
-  Button,
-  TextField,
-  Select,
-  Stack,
-  ResourceList,
-  ResourceItem,
-  Text,
-  Badge,
-  Modal,
-  FormLayout,
-} from "@shopify/polaris";
-import { DeleteIcon } from "@shopify/polaris-icons";
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
@@ -26,7 +10,6 @@ export const loader = async ({ request }) => {
 export default function ProceduresPage() {
   const [procedures, setProcedures] = useState([]);
   const [showBuilder, setShowBuilder] = useState(false);
-  const [selectedProcedure, setSelectedProcedure] = useState(null);
   const [procedureName, setProcedureName] = useState("");
   const [filters, setFilters] = useState({
     productType: "",
@@ -110,161 +93,163 @@ export default function ProceduresPage() {
   };
 
   return (
-    <Page
-      title="Bulk Edit Procedures"
-      primaryAction={
-        <Button onClick={() => setShowBuilder(true)} variant="primary">
+    <div style={{ padding: "20px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+        <h1>Bulk Edit Procedures</h1>
+        <button onClick={() => setShowBuilder(true)} style={{ padding: "8px 16px", backgroundColor: "#008060", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}>
           New Procedure
-        </Button>
-      }
-    >
-      <Layout>
-        <Layout.Section>
-          {procedures.length === 0 ? (
-            <Card>
-              <Text as="p">No procedures yet. Create one to get started.</Text>
-            </Card>
-          ) : (
-            <Card>
-              <ResourceList
-                resourceName={{ singular: "procedure", plural: "procedures" }}
-                items={procedures}
-                renderItem={(procedure) => (
-                  <ResourceItem
-                    id={procedure.id}
-                    accessibilityLabel={`Procedure ${procedure.name}`}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                      }}
-                    >
-                      <div>
-                        <Text fontWeight="bold">{procedure.name}</Text>
-                        <Text variant="bodySm" color="subdued">
-                          {Object.keys(procedure.changes).join(", ")}
-                        </Text>
-                      </div>
-                      <div style={{ display: "flex", gap: "8px" }}>
-                        <Button
-                          onClick={() => {
-                            setSelectedProcedure(procedure);
-                            setShowBuilder(true);
-                          }}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          icon={DeleteIcon}
-                          onClick={() => handleDeleteProcedure(procedure.id)}
-                          destructive
-                        />
-                      </div>
-                    </div>
-                  </ResourceItem>
-                )}
-              />
-            </Card>
-          )}
-        </Layout.Section>
+        </button>
+      </div>
 
-        <Modal
-          open={showBuilder}
-          onClose={() => {
-            setShowBuilder(false);
-            setSelectedProcedure(null);
-          }}
-          title="Create Procedure"
-          primaryAction={{
-            content: "Save",
-            onAction: handleSaveProcedure,
-            loading,
-          }}
-          secondaryActions={[
-            {
-              content: "Cancel",
-              onAction: () => {
-                setShowBuilder(false);
-                setSelectedProcedure(null);
-              },
-            },
-          ]}
-        >
-          <Modal.Section>
-            <FormLayout>
-              <TextField
-                label="Procedure Name"
+      {procedures.length === 0 ? (
+        <div style={{ padding: "20px", backgroundColor: "#f5f5f5", borderRadius: "4px" }}>
+          No procedures yet. Create one to get started.
+        </div>
+      ) : (
+        <div>
+          {procedures.map((proc) => (
+            <div key={proc.id} style={{ padding: "12px", border: "1px solid #e0e0e0", borderRadius: "4px", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontWeight: "bold" }}>{proc.name}</div>
+                <div style={{ fontSize: "12px", color: "#666" }}>
+                  Changes: {Object.keys(proc.changes).join(", ")}
+                </div>
+              </div>
+              <button
+                onClick={() => handleDeleteProcedure(proc.id)}
+                style={{ padding: "6px 12px", backgroundColor: "#e82c0c", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "12px" }}
+              >
+                Delete
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showBuilder && (
+        <div style={{ position: "fixed", top: "0", left: "0", right: "0", bottom: "0", backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ backgroundColor: "white", padding: "30px", borderRadius: "8px", maxWidth: "500px", width: "100%", maxHeight: "80vh", overflowY: "auto" }}>
+            <h2>Create Procedure</h2>
+
+            <label style={{ display: "block", marginBottom: "15px" }}>
+              Procedure Name
+              <input
+                type="text"
                 value={procedureName}
-                onChange={setProcedureName}
+                onChange={(e) => setProcedureName(e.target.value)}
                 placeholder="e.g., Summer Sale T-Shirts"
+                style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #ddd", borderRadius: "4px", boxSizing: "border-box" }}
               />
+            </label>
 
-              <Text variant="headingMd" as="h3">
-                Filters (Find Products)
-              </Text>
-              <TextField
-                label="Product Type"
+            <h3>Filters (Find Products)</h3>
+            <label style={{ display: "block", marginBottom: "15px" }}>
+              Product Type
+              <input
+                type="text"
                 value={filters.productType}
-                onChange={(val) =>
-                  setFilters({ ...filters, productType: val })
-                }
+                onChange={(e) => setFilters({ ...filters, productType: e.target.value })}
                 placeholder="e.g., T-Shirt"
+                style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #ddd", borderRadius: "4px", boxSizing: "border-box" }}
               />
-              <TextField
-                label="Tags (comma-separated)"
-                value={filters.tags}
-                onChange={(val) => setFilters({ ...filters, tags: val })}
-                placeholder="e.g., summer, sale"
-              />
-              <TextField
-                label="Vendor"
-                value={filters.vendor}
-                onChange={(val) => setFilters({ ...filters, vendor: val })}
-                placeholder="e.g., Nike"
-              />
+            </label>
 
-              <Text variant="headingMd" as="h3">
-                Changes (What to Update)
-              </Text>
-              <TextField
-                label="Title"
+            <label style={{ display: "block", marginBottom: "15px" }}>
+              Tags (comma-separated)
+              <input
+                type="text"
+                value={filters.tags}
+                onChange={(e) => setFilters({ ...filters, tags: e.target.value })}
+                placeholder="e.g., summer, sale"
+                style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #ddd", borderRadius: "4px", boxSizing: "border-box" }}
+              />
+            </label>
+
+            <label style={{ display: "block", marginBottom: "15px" }}>
+              Vendor
+              <input
+                type="text"
+                value={filters.vendor}
+                onChange={(e) => setFilters({ ...filters, vendor: e.target.value })}
+                placeholder="e.g., Nike"
+                style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #ddd", borderRadius: "4px", boxSizing: "border-box" }}
+              />
+            </label>
+
+            <h3>Changes (What to Update)</h3>
+            <label style={{ display: "block", marginBottom: "15px" }}>
+              Title
+              <input
+                type="text"
                 value={changes.title}
-                onChange={(val) => setChanges({ ...changes, title: val })}
+                onChange={(e) => setChanges({ ...changes, title: e.target.value })}
                 placeholder="Leave blank to skip"
+                style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #ddd", borderRadius: "4px", boxSizing: "border-box" }}
               />
-              <TextField
-                label="Price"
+            </label>
+
+            <label style={{ display: "block", marginBottom: "15px" }}>
+              Price
+              <input
+                type="text"
                 value={changes.price}
-                onChange={(val) => setChanges({ ...changes, price: val })}
+                onChange={(e) => setChanges({ ...changes, price: e.target.value })}
                 placeholder="Leave blank to skip"
+                style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #ddd", borderRadius: "4px", boxSizing: "border-box" }}
               />
-              <TextField
-                label="Vendor"
+            </label>
+
+            <label style={{ display: "block", marginBottom: "15px" }}>
+              Vendor
+              <input
+                type="text"
                 value={changes.vendor}
-                onChange={(val) => setChanges({ ...changes, vendor: val })}
+                onChange={(e) => setChanges({ ...changes, vendor: e.target.value })}
                 placeholder="Leave blank to skip"
+                style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #ddd", borderRadius: "4px", boxSizing: "border-box" }}
               />
-              <TextField
-                label="Tags (comma-separated)"
+            </label>
+
+            <label style={{ display: "block", marginBottom: "15px" }}>
+              Tags (comma-separated)
+              <input
+                type="text"
                 value={changes.tags}
-                onChange={(val) => setChanges({ ...changes, tags: val })}
+                onChange={(e) => setChanges({ ...changes, tags: e.target.value })}
                 placeholder="Leave blank to skip"
+                style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #ddd", borderRadius: "4px", boxSizing: "border-box" }}
               />
-              <TextField
-                label="Description (HTML)"
+            </label>
+
+            <label style={{ display: "block", marginBottom: "15px" }}>
+              Description (HTML)
+              <textarea
                 value={changes.descriptionHtml}
-                onChange={(val) =>
-                  setChanges({ ...changes, descriptionHtml: val })
-                }
+                onChange={(e) => setChanges({ ...changes, descriptionHtml: e.target.value })}
                 placeholder="Leave blank to skip"
-                multiline={3}
+                rows={3}
+                style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #ddd", borderRadius: "4px", boxSizing: "border-box", fontFamily: "monospace" }}
               />
-            </FormLayout>
-          </Modal.Section>
-        </Modal>
-      </Layout>
-    </Page>
+            </label>
+
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setShowBuilder(false)}
+                style={{ padding: "8px 16px", backgroundColor: "#f0f0f0", border: "1px solid #ddd", borderRadius: "4px", cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveProcedure}
+                disabled={loading}
+                style={{ padding: "8px 16px", backgroundColor: "#008060", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
+              >
+                {loading ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
