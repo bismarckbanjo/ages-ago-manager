@@ -42,7 +42,16 @@ export class FilterEvaluator {
   }
 
   evaluateCollection(operator, value) {
-    const productCollections = this.product.collections || [];
+    let productCollections = [];
+
+    if (this.product.collections) {
+      if (Array.isArray(this.product.collections)) {
+        productCollections = this.product.collections;
+      } else if (this.product.collections.edges && Array.isArray(this.product.collections.edges)) {
+        productCollections = this.product.collections.edges.map((edge) => edge.node);
+      }
+    }
+
     const collectionHandles = productCollections.map((c) => c.handle || "");
     const collectionTitles = productCollections.map((c) => c.title || "");
     const allCollectionNames = [...collectionHandles, ...collectionTitles];
