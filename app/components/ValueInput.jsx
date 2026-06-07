@@ -1,5 +1,31 @@
 import { useState, useEffect } from "react";
 
+function CollectionSelect({ value, onChange, loadingCollections, collections }) {
+  return (
+    <select
+      value={value || ""}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={loadingCollections}
+      style={{
+        padding: "8px",
+        border: "1px solid #ddd",
+        borderRadius: "4px",
+        fontFamily: "inherit",
+        minWidth: "200px",
+      }}
+    >
+      <option value="">
+        {loadingCollections ? "Loading collections..." : "Select a collection..."}
+      </option>
+      {collections.map((col) => (
+        <option key={col.id} value={col.title}>
+          {col.title}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export function ValueInput({ type, value, onChange, field }) {
   const [collections, setCollections] = useState([]);
   const [loadingCollections, setLoadingCollections] = useState(false);
@@ -27,27 +53,12 @@ export function ValueInput({ type, value, onChange, field }) {
 
   if (field === "collection" && type === "text") {
     return (
-      <select
-        value={value || ""}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={loadingCollections}
-        style={{
-          padding: "8px",
-          border: "1px solid #ddd",
-          borderRadius: "4px",
-          fontFamily: "inherit",
-          minWidth: "200px",
-        }}
-      >
-        <option value="">
-          {loadingCollections ? "Loading collections..." : "Select a collection..."}
-        </option>
-        {collections.map((col) => (
-          <option key={col.id} value={col.title}>
-            {col.title}
-          </option>
-        ))}
-      </select>
+      <CollectionSelect
+        value={value}
+        onChange={onChange}
+        loadingCollections={loadingCollections}
+        collections={collections}
+      />
     );
   }
   if (type === "text") {
