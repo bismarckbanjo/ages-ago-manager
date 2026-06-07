@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-06-07 (Phase 3: Scheduling Infrastructure & API)
+
+- **Vercel Cron Endpoint**: Created `/api/cron/procedure-executor` to check and execute scheduled procedures hourly.
+- **Enhanced API**: Extended `/api/procedures` to support:
+  - POST: Create procedures with validation
+  - PUT: Update procedures
+  - GET: List procedures, fetch execution history, get execution details with logs
+  - PATCH: Manual execution trigger and schedule updates
+- **Session Management**: Cron handler retrieves access tokens from stored sessions to authenticate with Shopify API.
+- **Input Validation**: All procedure creation/updates validated against schema before persistence.
+- **Build**: Verified all routes and services compile correctly.
+
 ## 2026-06-07 (Phase 2: Core Execution Engine)
 
 - **FilterEvaluator**: Evaluates products against complex filter conditions (collection, tags, vendor, productType, price) with support for operators like equals, contains, any_match, greater_than, etc.
