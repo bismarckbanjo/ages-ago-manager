@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-06-07 (Phase 2: Core Execution Engine)
+
+- **FilterEvaluator**: Evaluates products against complex filter conditions (collection, tags, vendor, productType, price) with support for operators like equals, contains, any_match, greater_than, etc.
+- **GraphQLQueryBuilder**: Converts filter conditions to efficient Shopify GraphQL queries with pagination support.
+- **GraphQLMutationBuilder**: Builds GraphQL mutations to update product fields (title, vendor, meta tags, description).
+- **BatchProcessor**: Handles batch processing with retry logic, exponential backoff, and rate limiting.
+- **ProcedureExecutor**: Main orchestrator that coordinates fetching products, evaluating filters, and applying bulk updates.
+- **ScheduleEvaluator**: Determines if a procedure should execute based on its schedule (daily, weekly, monthly).
+- **Build**: Verified all services compile and integrate properly.
+
 ## 2026-06-07 (Phase 1: Procedures Data Layer)
 
 - **Schema**: Extended Prisma schema with `ProcedureExecution` and `ProcedureLog` models for audit trail and execution history.
