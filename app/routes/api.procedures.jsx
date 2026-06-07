@@ -132,9 +132,7 @@ export async function action({ request }) {
   }
 
   if (request.method === "PATCH") {
-    const pathParts = url.pathname.split("/");
-    const procedureId = pathParts[pathParts.length - 2];
-    const action = pathParts[pathParts.length - 1];
+    const { action, id: procedureId } = await request.json();
 
     if (action === "execute") {
       try {
