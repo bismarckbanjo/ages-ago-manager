@@ -2,7 +2,7 @@
 
 client_id = "854c8d52c41c3b46fdec5892bd7be4c0"
 name = "ages-ago-manager"
-application_url = "http://localhost:3000"
+application_url = "https://ages-ago-manager.vercel.app"
 embedded = true
 
 [build]
@@ -16,4 +16,4 @@ api_version = "2026-07"
 scopes = "read_products,write_products"
 
 [auth]
-redirect_urls = [ "http://localhost:3000/callback" ]
+redirect_urls = [ "https://ages-ago-manager.vercel.app/callback" ]
