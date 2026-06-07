@@ -1,72 +1,101 @@
 import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
+import { QueryBuilder } from "../components/QueryBuilder";
+import { ChangesBuilder } from "../components/ChangesBuilder";
+import { ScheduleSelector } from "../components/ScheduleSelector";
+import { ExecutionHistory } from "../components/ExecutionHistory";
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
-  return Response.json({});
+  return {};
 };
 
 export default function ProceduresPage() {
   const [procedures, setProcedures] = useState([]);
+  const [selectedProcedure, setSelectedProcedure] = useState(null);
   const [showBuilder, setShowBuilder] = useState(false);
-  const [procedureName, setProcedureName] = useState("");
-  const [filters, setFilters] = useState({
-    productType: "",
-    tags: "",
-    vendor: "",
-  });
-  const [changes, setChanges] = useState({
-    title: "",
-    price: "",
-    tags: "",
-    vendor: "",
-    descriptionHtml: "",
-  });
+  const [isCreating, setIsCreating] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [executingId, setExecutingId] = useState(null);
+
+  const [form, setForm] = useState({
+    name: "",
+    description: "",
+    filters: { conditions: [{ field: "", operator: "", value: "" }], combineWith: "AND" },
+    changes: { fields: {} },
+    schedule: "manual",
+  });
 
   useEffect(() => {
     fetchProcedures();
   }, []);
 
   const fetchProcedures = async () => {
-    const res = await fetch("/api/procedures");
-    const data = await res.json();
-    setProcedures(data);
+    try {
+      const res = await fetch("/api/procedures");
+      if (res.ok) {
+        const data = await res.json();
+        setProcedures(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch procedures:", err);
+    }
+  };
+
+  const resetForm = () => {
+    setForm({
+      name: "",
+      description: "",
+      filters: { conditions: [{ field: "", operator: "", value: "" }], combineWith: "AND" },
+      changes: { fields: {} },
+      schedule: "manual",
+    });
+    setIsCreating(false);
   };
 
   const handleSaveProcedure = async () => {
-    if (!procedureName) {
+    if (!form.name.trim()) {
       alert("Procedure name is required");
+      return;
+    }
+
+    if (form.filters.conditions.every((c) => !c.field)) {
+      alert("At least one filter condition is required");
+      return;
+    }
+
+    if (Object.keys(form.changes.fields).length === 0) {
+      alert("At least one change field is required");
       return;
     }
 
     setLoading(true);
     try {
-      const res = await fetch("/api/procedures", {
-        method: "POST",
+      const method = selectedProcedure ? "PUT" : "POST";
+      const url = selectedProcedure ? `/api/procedures?id=${selectedProcedure.id}` : "/api/procedures";
+      const body = selectedProcedure
+        ? {
+            id: selectedProcedure.id,
+            ...form,
+          }
+        : form;
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: procedureName,
-          filters,
-          changes: Object.fromEntries(
-            Object.entries(changes).filter(([_, v]) => v)
-          ),
-        }),
+        body: JSON.stringify(body),
       });
 
-      if (res.ok) {
-        setProcedureName("");
-        setFilters({ productType: "", tags: "", vendor: "" });
-        setChanges({
-          title: "",
-          price: "",
-          tags: "",
-          vendor: "",
-          descriptionHtml: "",
-        });
-        setShowBuilder(false);
-        await fetchProcedures();
+      if (!res.ok) {
+        const error = await res.json();
+        alert(`Error: ${error.message || "Failed to save procedure"}`);
+        return;
       }
+
+      await fetchProcedures();
+      resetForm();
+      setShowBuilder(false);
+      setSelectedProcedure(null);
     } catch (err) {
       console.error(err);
       alert("Failed to save procedure");
@@ -76,179 +105,354 @@ export default function ProceduresPage() {
   };
 
   const handleDeleteProcedure = async (id) => {
-    if (confirm("Delete this procedure?")) {
-      try {
-        await fetch("/api/procedures", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id }),
-        });
-        await fetchProcedures();
-      } catch (err) {
-        console.error(err);
-        alert("Failed to delete procedure");
-      }
+    if (!confirm("Delete this procedure? This action cannot be undone.")) {
+      return;
     }
+
+    try {
+      await fetch("/api/procedures", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      await fetchProcedures();
+      setSelectedProcedure(null);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete procedure");
+    }
+  };
+
+  const handleExecuteProcedure = async (id) => {
+    setExecutingId(id);
+    try {
+      const res = await fetch(`/api/procedures`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "execute", id }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        alert(`Execution failed: ${error.error}`);
+        return;
+      }
+
+      const execution = await res.json();
+      alert(
+        `Procedure executed! Updated ${execution.productsUpdated}/${execution.productsMatched} products.`
+      );
+      await fetchProcedures();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to execute procedure");
+    } finally {
+      setExecutingId(null);
+    }
+  };
+
+  const handleEditProcedure = (proc) => {
+    setSelectedProcedure(proc);
+    setForm({
+      name: proc.name,
+      description: proc.description || "",
+      filters: proc.filters,
+      changes: proc.changes,
+      schedule: proc.schedule,
+    });
+    setIsCreating(true);
+    setShowBuilder(true);
   };
 
   return (
     <div style={{ padding: "20px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-        <h1>Bulk Edit Procedures</h1>
-        <button onClick={() => setShowBuilder(true)} style={{ padding: "8px 16px", backgroundColor: "#008060", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}>
-          New Procedure
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+        <div>
+          <h1 style={{ margin: "0 0 4px 0" }}>Bulk Edit Procedures</h1>
+          <p style={{ margin: 0, fontSize: "14px", color: "#666" }}>
+            Create reusable procedures to bulk edit products by collection, tags, price, and more.
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            resetForm();
+            setShowBuilder(true);
+            setSelectedProcedure(null);
+          }}
+          style={{
+            padding: "10px 18px",
+            backgroundColor: "#008060",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "14px",
+            fontWeight: "500",
+          }}
+        >
+          + New Procedure
         </button>
       </div>
 
-      {procedures.length === 0 ? (
-        <div style={{ padding: "20px", backgroundColor: "#f5f5f5", borderRadius: "4px" }}>
-          No procedures yet. Create one to get started.
-        </div>
-      ) : (
-        <div>
-          {procedures.map((proc) => (
-            <div key={proc.id} style={{ padding: "12px", border: "1px solid #e0e0e0", borderRadius: "4px", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <div style={{ fontWeight: "bold" }}>{proc.name}</div>
-                <div style={{ fontSize: "12px", color: "#666" }}>
-                  Changes: {Object.keys(proc.changes).join(", ")}
-                </div>
-              </div>
-              <button
-                onClick={() => handleDeleteProcedure(proc.id)}
-                style={{ padding: "6px 12px", backgroundColor: "#e82c0c", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "12px" }}
-              >
-                Delete
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
       {showBuilder && (
-        <div style={{ position: "fixed", top: "0", left: "0", right: "0", bottom: "0", backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ backgroundColor: "white", padding: "30px", borderRadius: "8px", maxWidth: "500px", width: "100%", maxHeight: "80vh", overflowY: "auto" }}>
-            <h2>Create Procedure</h2>
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "white",
+              borderRadius: "8px",
+              maxWidth: "900px",
+              width: "90%",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              padding: "24px",
+            }}
+          >
+            <h2 style={{ margin: "0 0 20px 0" }}>
+              {selectedProcedure ? "Edit Procedure" : "Create New Procedure"}
+            </h2>
 
-            <label style={{ display: "block", marginBottom: "15px" }}>
-              Procedure Name
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "4px", fontSize: "14px", fontWeight: "500" }}>
+                Procedure Name *
+              </label>
               <input
                 type="text"
-                value={procedureName}
-                onChange={(e) => setProcedureName(e.target.value)}
-                placeholder="e.g., Summer Sale T-Shirts"
-                style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #ddd", borderRadius: "4px", boxSizing: "border-box" }}
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="e.g., Spring Sale Price Update"
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  border: "1px solid #ddd",
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  boxSizing: "border-box",
+                }}
               />
-            </label>
+            </div>
 
-            <h3>Filters (Find Products)</h3>
-            <label style={{ display: "block", marginBottom: "15px" }}>
-              Product Type
-              <input
-                type="text"
-                value={filters.productType}
-                onChange={(e) => setFilters({ ...filters, productType: e.target.value })}
-                placeholder="e.g., T-Shirt"
-                style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #ddd", borderRadius: "4px", boxSizing: "border-box" }}
-              />
-            </label>
-
-            <label style={{ display: "block", marginBottom: "15px" }}>
-              Tags (comma-separated)
-              <input
-                type="text"
-                value={filters.tags}
-                onChange={(e) => setFilters({ ...filters, tags: e.target.value })}
-                placeholder="e.g., summer, sale"
-                style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #ddd", borderRadius: "4px", boxSizing: "border-box" }}
-              />
-            </label>
-
-            <label style={{ display: "block", marginBottom: "15px" }}>
-              Vendor
-              <input
-                type="text"
-                value={filters.vendor}
-                onChange={(e) => setFilters({ ...filters, vendor: e.target.value })}
-                placeholder="e.g., Nike"
-                style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #ddd", borderRadius: "4px", boxSizing: "border-box" }}
-              />
-            </label>
-
-            <h3>Changes (What to Update)</h3>
-            <label style={{ display: "block", marginBottom: "15px" }}>
-              Title
-              <input
-                type="text"
-                value={changes.title}
-                onChange={(e) => setChanges({ ...changes, title: e.target.value })}
-                placeholder="Leave blank to skip"
-                style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #ddd", borderRadius: "4px", boxSizing: "border-box" }}
-              />
-            </label>
-
-            <label style={{ display: "block", marginBottom: "15px" }}>
-              Price
-              <input
-                type="text"
-                value={changes.price}
-                onChange={(e) => setChanges({ ...changes, price: e.target.value })}
-                placeholder="Leave blank to skip"
-                style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #ddd", borderRadius: "4px", boxSizing: "border-box" }}
-              />
-            </label>
-
-            <label style={{ display: "block", marginBottom: "15px" }}>
-              Vendor
-              <input
-                type="text"
-                value={changes.vendor}
-                onChange={(e) => setChanges({ ...changes, vendor: e.target.value })}
-                placeholder="Leave blank to skip"
-                style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #ddd", borderRadius: "4px", boxSizing: "border-box" }}
-              />
-            </label>
-
-            <label style={{ display: "block", marginBottom: "15px" }}>
-              Tags (comma-separated)
-              <input
-                type="text"
-                value={changes.tags}
-                onChange={(e) => setChanges({ ...changes, tags: e.target.value })}
-                placeholder="Leave blank to skip"
-                style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #ddd", borderRadius: "4px", boxSizing: "border-box" }}
-              />
-            </label>
-
-            <label style={{ display: "block", marginBottom: "15px" }}>
-              Description (HTML)
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "4px", fontSize: "14px", fontWeight: "500" }}>
+                Description
+              </label>
               <textarea
-                value={changes.descriptionHtml}
-                onChange={(e) => setChanges({ ...changes, descriptionHtml: e.target.value })}
-                placeholder="Leave blank to skip"
-                rows={3}
-                style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #ddd", borderRadius: "4px", boxSizing: "border-box", fontFamily: "monospace" }}
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                placeholder="Optional: describe what this procedure does"
+                rows={2}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  border: "1px solid #ddd",
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "inherit",
+                  boxSizing: "border-box",
+                }}
               />
-            </label>
+            </div>
 
-            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+            <div style={{ marginBottom: "20px" }}>
+              <QueryBuilder
+                filters={form.filters}
+                onChange={(filters) => setForm({ ...form, filters })}
+              />
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <ChangesBuilder
+                changes={form.changes}
+                onChange={(changes) => setForm({ ...form, changes })}
+              />
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <ScheduleSelector
+                schedule={form.schedule}
+                onChange={(schedule) => setForm({ ...form, schedule })}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
               <button
-                onClick={() => setShowBuilder(false)}
-                style={{ padding: "8px 16px", backgroundColor: "#f0f0f0", border: "1px solid #ddd", borderRadius: "4px", cursor: "pointer" }}
+                onClick={() => {
+                  setShowBuilder(false);
+                  resetForm();
+                }}
+                style={{
+                  padding: "10px 18px",
+                  backgroundColor: "#f0f0f0",
+                  border: "1px solid #ddd",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  fontWeight: "500",
+                }}
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveProcedure}
                 disabled={loading}
-                style={{ padding: "8px 16px", backgroundColor: "#008060", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
+                style={{
+                  padding: "10px 18px",
+                  backgroundColor: "#008060",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: loading ? "not-allowed" : "pointer",
+                  fontSize: "14px",
+                  fontWeight: "500",
+                  opacity: loading ? 0.6 : 1,
+                }}
               >
-                {loading ? "Saving..." : "Save"}
+                {loading ? "Saving..." : selectedProcedure ? "Update Procedure" : "Create Procedure"}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: "20px" }}>
+        <div>
+          <h3 style={{ margin: "0 0 12px 0", fontSize: "14px" }}>Procedures ({procedures.length})</h3>
+          {procedures.length === 0 ? (
+            <div style={{ padding: "12px", backgroundColor: "#f5f5f5", borderRadius: "4px", fontSize: "12px", color: "#666" }}>
+              No procedures yet. Create one to get started.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {procedures.map((proc) => (
+                <div
+                  key={proc.id}
+                  onClick={() => setSelectedProcedure(proc)}
+                  style={{
+                    padding: "12px",
+                    border: selectedProcedure?.id === proc.id ? "2px solid #008060" : "1px solid #e0e0e0",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    backgroundColor: selectedProcedure?.id === proc.id ? "#f0f8f5" : "white",
+                    transition: "all 0.2s",
+                  }}
+                >
+                  <div style={{ fontWeight: "500", fontSize: "14px", marginBottom: "4px" }}>
+                    {proc.name}
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#666" }}>
+                    {proc.schedule === "manual" ? "Manual" : proc.schedule.charAt(0).toUpperCase() + proc.schedule.slice(1)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          {selectedProcedure ? (
+            <div>
+              <div style={{ marginBottom: "20px" }}>
+                <h2 style={{ margin: "0 0 8px 0" }}>{selectedProcedure.name}</h2>
+                {selectedProcedure.description && (
+                  <p style={{ margin: 0, fontSize: "14px", color: "#666" }}>
+                    {selectedProcedure.description}
+                  </p>
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
+                <button
+                  onClick={() => handleExecuteProcedure(selectedProcedure.id)}
+                  disabled={executingId === selectedProcedure.id}
+                  style={{
+                    padding: "10px 18px",
+                    backgroundColor: "#4caf50",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: executingId === selectedProcedure.id ? "not-allowed" : "pointer",
+                    fontSize: "14px",
+                    fontWeight: "500",
+                    opacity: executingId === selectedProcedure.id ? 0.6 : 1,
+                  }}
+                >
+                  {executingId === selectedProcedure.id ? "Executing..." : "Apply Now"}
+                </button>
+                <button
+                  onClick={() => handleEditProcedure(selectedProcedure)}
+                  style={{
+                    padding: "10px 18px",
+                    backgroundColor: "#2196f3",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: "500",
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => handleDeleteProcedure(selectedProcedure.id)}
+                  style={{
+                    padding: "10px 18px",
+                    backgroundColor: "#f44336",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: "500",
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+
+              <div style={{ border: "1px solid #e0e0e0", borderRadius: "4px", padding: "16px", marginBottom: "20px" }}>
+                <h3 style={{ margin: "0 0 12px 0", fontSize: "14px" }}>Filter Conditions</h3>
+                <div style={{ fontSize: "12px", color: "#666" }}>
+                  {selectedProcedure.filters?.conditions?.map((cond, idx) => (
+                    <div key={idx} style={{ marginBottom: "4px" }}>
+                      {cond.field} {cond.operator} "{cond.value}"
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ border: "1px solid #e0e0e0", borderRadius: "4px", padding: "16px", marginBottom: "20px" }}>
+                <h3 style={{ margin: "0 0 12px 0", fontSize: "14px" }}>Changes</h3>
+                <div style={{ fontSize: "12px", color: "#666" }}>
+                  {Object.entries(selectedProcedure.changes?.fields || {}).map(([field, change]) => (
+                    <div key={field} style={{ marginBottom: "4px" }}>
+                      {field}: {change.action} {change.value}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <ExecutionHistory procedureId={selectedProcedure.id} />
+            </div>
+          ) : (
+            <div style={{ padding: "40px", textAlign: "center", color: "#999" }}>
+              Select a procedure or create a new one to get started
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

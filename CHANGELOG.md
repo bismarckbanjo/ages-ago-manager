@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-06-07 (Phase 4: Visual Query & Changes Builders)
+
+- **QueryBuilder**: React component for visual construction of filter conditions with field/operator/value selectors.
+- **FilterFieldSelector & OperatorSelector**: Dropdowns for selecting fields and operators with field-specific validation.
+- **ValueInput**: Polymorphic input component supporting text, numbers, ranges, and tag lists depending on field/operator.
+- **ChangesBuilder**: Visual interface to specify which fields to update and what actions to perform (set, append, increase_by, etc.).
+- **ScheduleSelector**: Radio buttons to choose between manual-only, daily, weekly, or monthly execution.
+- **ExecutionHistory**: Expandable list of past procedure executions with stats (matched, updated, failed, duration, errors).
+- **Procedures UI**: Complete rewrite of app.procedures.jsx using new components. Split-view with procedure list on left and detail view on right. Supports create, edit, delete, and manual execution.
+- **Build**: Verified all components integrate and build correctly.
+
 ## 2026-06-07 (Phase 3: Scheduling Infrastructure & API)
 
 - **Vercel Cron Endpoint**: Created `/api/cron/procedure-executor` to check and execute scheduled procedures hourly.
