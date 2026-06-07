@@ -65,7 +65,10 @@ export class GraphQLQueryBuilder {
 
     if (queryParts.length === 0) return "";
 
-    return `, query: "${queryParts.join(" AND ")}"`;
+    const queryString = queryParts.join(" AND ");
+    const escapedQuery = queryString.replace(/"/g, '\\"');
+
+    return `, query: "${escapedQuery}"`;
   }
 
   buildQueryPart(condition) {
@@ -88,16 +91,16 @@ export class GraphQLQueryBuilder {
   }
 
   buildCollectionQuery(operator, value) {
-    const escapedValue = this.escapeQueryValue(value);
+    const cleanValue = this.cleanValue(value);
 
     switch (operator) {
       case "equals":
-        return `collection:"${escapedValue}"`;
+        return `collection:${cleanValue}`;
       case "contains":
-        return `collection:"${escapedValue}"`;
+        return `collection:${cleanValue}`;
       case "in":
         if (Array.isArray(value)) {
-          return `(${value.map((v) => `collection:"${this.escapeQueryValue(v)}"`).join(" OR ")})`;
+          return `(${value.map((v) => `collection:${this.cleanValue(v)}`).join(" OR ")})`;
         }
         return null;
       default:
@@ -108,49 +111,49 @@ export class GraphQLQueryBuilder {
   buildTagsQuery(operator, value) {
     if (!Array.isArray(value)) return null;
 
-    const escapedValues = value.map((v) => `tag:"${this.escapeQueryValue(v)}"`);
+    const cleanedValues = value.map((v) => `tag:${this.cleanValue(v)}`);
 
     switch (operator) {
       case "any_match":
-        return `(${escapedValues.join(" OR ")})`;
+        return `(${cleanedValues.join(" OR ")})`;
       case "all_match":
-        return escapedValues.join(" AND ");
+        return cleanedValues.join(" AND ");
       default:
         return null;
     }
   }
 
   buildVendorQuery(operator, value) {
-    const escapedValue = this.escapeQueryValue(value);
+    const cleanValue = this.cleanValue(value);
 
     switch (operator) {
       case "equals":
-        return `vendor:"${escapedValue}"`;
+        return `vendor:${cleanValue}`;
       case "contains":
-        return `vendor:"${escapedValue}"`;
+        return `vendor:${cleanValue}`;
       default:
         return null;
     }
   }
 
   buildProductTypeQuery(operator, value) {
-    const escapedValue = this.escapeQueryValue(value);
+    const cleanValue = this.cleanValue(value);
 
     switch (operator) {
       case "equals":
-        return `product_type:"${escapedValue}"`;
+        return `product_type:${cleanValue}`;
       case "contains":
-        return `product_type:"${escapedValue}"`;
+        return `product_type:${cleanValue}`;
       default:
         return null;
     }
   }
 
-  escapeQueryValue(value) {
+  cleanValue(value) {
     if (typeof value !== "string") {
       value = String(value);
     }
-    return value.replace(/"/g, '\\"');
+    return value;
   }
 }
 
