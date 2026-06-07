@@ -1,6 +1,55 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export function ValueInput({ type, value, onChange, field }) {
+  const [collections, setCollections] = useState([]);
+  const [loadingCollections, setLoadingCollections] = useState(false);
+
+  useEffect(() => {
+    if (field === "collection" && type === "text") {
+      fetchCollections();
+    }
+  }, [field, type]);
+
+  const fetchCollections = async () => {
+    setLoadingCollections(true);
+    try {
+      const res = await fetch("/api/collections");
+      if (res.ok) {
+        const data = await res.json();
+        setCollections(data.collections || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch collections:", err);
+    } finally {
+      setLoadingCollections(false);
+    }
+  };
+
+  if (field === "collection" && type === "text") {
+    return (
+      <select
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={loadingCollections}
+        style={{
+          padding: "8px",
+          border: "1px solid #ddd",
+          borderRadius: "4px",
+          fontFamily: "inherit",
+          minWidth: "200px",
+        }}
+      >
+        <option value="">
+          {loadingCollections ? "Loading collections..." : "Select a collection..."}
+        </option>
+        {collections.map((col) => (
+          <option key={col.id} value={col.title}>
+            {col.title}
+          </option>
+        ))}
+      </select>
+    );
+  }
   if (type === "text") {
     return (
       <input

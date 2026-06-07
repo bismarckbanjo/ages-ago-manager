@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-07 (UX Enhancements: Collections Sync & Preview)
+
+- **Collections Dropdown**: Added `/api/collections` endpoint to fetch actual collections from store. Collection filter now shows dropdown instead of text input.
+- **Preview Results**: New "Preview Results" button shows matching products before executing procedure. Displays title, vendor, price, tags for first 10 matches. Shows total count.
+- **Better Error Messages**: Validation errors now show specific field issues (e.g., "operator 'append' is not valid for field 'vendor'") instead of generic "Validation failed".
+- **Error Display in UI**: Error messages displayed in red alert box within the procedure builder modal.
+- **Build**: Verified all changes compile and integrate correctly.
+
 ## 2026-06-07 (Testing & Verification Complete)
 
 **System fully functional.** Tested:

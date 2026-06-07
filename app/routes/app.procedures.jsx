@@ -4,6 +4,7 @@ import { QueryBuilder } from "../components/QueryBuilder";
 import { ChangesBuilder } from "../components/ChangesBuilder";
 import { ScheduleSelector } from "../components/ScheduleSelector";
 import { ExecutionHistory } from "../components/ExecutionHistory";
+import { PreviewResults } from "../components/PreviewResults";
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
@@ -18,6 +19,7 @@ export default function ProceduresPage() {
   const [loading, setLoading] = useState(false);
   const [executingId, setExecutingId] = useState(null);
 
+  const [formError, setFormError] = useState(null);
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -54,18 +56,20 @@ export default function ProceduresPage() {
   };
 
   const handleSaveProcedure = async () => {
+    setFormError(null);
+
     if (!form.name.trim()) {
-      alert("Procedure name is required");
+      setFormError("Procedure name is required");
       return;
     }
 
     if (form.filters.conditions.every((c) => !c.field)) {
-      alert("At least one filter condition is required");
+      setFormError("At least one filter condition is required");
       return;
     }
 
     if (Object.keys(form.changes.fields).length === 0) {
-      alert("At least one change field is required");
+      setFormError("At least one change field is required");
       return;
     }
 
@@ -88,7 +92,11 @@ export default function ProceduresPage() {
 
       if (!res.ok) {
         const error = await res.json();
-        alert(`Error: ${error.message || "Failed to save procedure"}`);
+        if (error.errors && Array.isArray(error.errors)) {
+          setFormError(error.errors.join("\n"));
+        } else {
+          setFormError(error.message || "Failed to save procedure");
+        }
         return;
       }
 
@@ -98,7 +106,7 @@ export default function ProceduresPage() {
       setSelectedProcedure(null);
     } catch (err) {
       console.error(err);
-      alert("Failed to save procedure");
+      setFormError("Failed to save procedure");
     } finally {
       setLoading(false);
     }
@@ -224,6 +232,22 @@ export default function ProceduresPage() {
               {selectedProcedure ? "Edit Procedure" : "Create New Procedure"}
             </h2>
 
+            {formError && (
+              <div
+                style={{
+                  marginBottom: "16px",
+                  padding: "12px",
+                  backgroundColor: "#ffebee",
+                  color: "#c62828",
+                  borderRadius: "4px",
+                  fontSize: "13px",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {formError}
+              </div>
+            )}
+
             <div style={{ marginBottom: "20px" }}>
               <label style={{ display: "block", marginBottom: "4px", fontSize: "14px", fontWeight: "500" }}>
                 Procedure Name *
@@ -270,6 +294,7 @@ export default function ProceduresPage() {
                 filters={form.filters}
                 onChange={(filters) => setForm({ ...form, filters })}
               />
+              <PreviewResults filters={form.filters} />
             </div>
 
             <div style={{ marginBottom: "20px" }}>

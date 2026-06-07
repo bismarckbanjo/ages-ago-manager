@@ -39,6 +39,32 @@ export async function loader({ request }) {
 export async function action({ request }) {
   const { session, admin } = await authenticate.admin(request);
   const url = new URL(request.url);
+  const action = url.searchParams.get("action");
+
+  if (request.method === "POST" && action === "preview") {
+    try {
+      const { filters } = await request.json();
+      const { ProcedureExecutor } = await import("../services/procedureExecutor.server.js");
+      const executor = new ProcedureExecutor(admin, session.shop);
+      const products = await executor.fetchAllMatchingProducts(filters);
+
+      return Response.json({
+        totalMatched: products.length,
+        preview: products.slice(0, 10).map(p => ({
+          id: p.id,
+          title: p.title,
+          vendor: p.vendor,
+          tags: p.tags,
+          price: p.variants?.edges?.[0]?.node?.price
+        }))
+      });
+    } catch (error) {
+      return Response.json(
+        { error: error.message },
+        { status: 500 }
+      );
+    }
+  }
 
   if (request.method === "POST") {
     const { name, description, filters, changes, schedule } =
@@ -47,7 +73,11 @@ export async function action({ request }) {
     const validation = validateProcedure(name, filters, changes, schedule);
     if (!validation.valid) {
       return Response.json(
-        formatValidationErrors(validation.errors),
+        {
+          code: "VALIDATION_ERROR",
+          message: "Validation failed",
+          errors: validation.errors,
+        },
         { status: 400 }
       );
     }
