@@ -1,4 +1,3 @@
-import { json } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -8,7 +7,7 @@ export async function loader({ request }) {
     where: { shop: session.shop },
     orderBy: { createdAt: "desc" },
   });
-  return json(procedures);
+  return Response.json(procedures);
 }
 
 export async function action({ request }) {
@@ -24,7 +23,7 @@ export async function action({ request }) {
         changes,
       },
     });
-    return json(procedure, { status: 201 });
+    return Response.json(procedure, { status: 201 });
   }
 
   if (request.method === "DELETE") {
@@ -32,8 +31,8 @@ export async function action({ request }) {
     await prisma.procedure.delete({
       where: { id },
     });
-    return json({ success: true });
+    return Response.json({ success: true });
   }
 
-  return json({ error: "Method not allowed" }, { status: 405 });
+  return Response.json({ error: "Method not allowed" }, { status: 405 });
 }

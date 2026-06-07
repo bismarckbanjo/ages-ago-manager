@@ -34,13 +34,56 @@ model Session {
 }
 
 model Procedure {
-  id        String   @id @default(cuid())
-  shop      String
-  name      String
-  filters   Json
-  changes   Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  shop        String
+  name        String
+  description String?
+  filters     Json
+  changes     Json
+  schedule    String   @default("manual")
+  isActive    Boolean  @default(true)
+  lastExecutedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  executions ProcedureExecution[]
 
   @@unique([shop, name])
+  @@index([shop, isActive])
+}
+
+model ProcedureExecution {
+  id             String   @id @default(cuid())
+  procedureId    String
+  procedure      Procedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  shop           String
+  status         String
+  triggeredBy    String
+  productsMatched Int @default(0)
+  productsUpdated Int @default(0)
+  productsFailed Int @default(0)
+  errors         Json?
+  startedAt      DateTime @default(now())
+  completedAt    DateTime?
+  createdAt      DateTime @default(now())
+
+  logs ProcedureLog[]
+
+  @@index([procedureId, status])
+  @@index([shop, createdAt])
+}
+
+model ProcedureLog {
+  id          String   @id @default(cuid())
+  procedureId String
+  executionId String
+  execution   ProcedureExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  shop        String
+  productId   String
+  message     String
+  status      String
+  createdAt   DateTime @default(now())
+
+  @@index([executionId])
+  @@index([procedureId, productId])
 }

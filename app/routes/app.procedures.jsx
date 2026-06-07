@@ -1,10 +1,9 @@
 import { useState, useEffect } from "react";
-import { json } from "react-router";
 import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
-  return json({});
+  return Response.json({});
 };
 
 export default function ProceduresPage() {

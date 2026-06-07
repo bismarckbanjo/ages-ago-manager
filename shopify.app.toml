@@ -16,4 +16,4 @@ api_version = "2026-07"
 scopes = "read_products,write_products"
 
 [auth]
-redirect_urls = [ "https://ages-ago-manager.vercel.app/callback" ]
+redirect_urls = [ "https://ages-ago-manager.vercel.app/auth/callback" ]
