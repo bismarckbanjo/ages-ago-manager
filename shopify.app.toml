@@ -1,0 +1,19 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "854c8d52c41c3b46fdec5892bd7be4c0"
+name = "ages-ago-manager"
+application_url = "http://localhost:3000"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = false
+
+[webhooks]
+api_version = "2026-07"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_products,write_products"
+
+[auth]
+redirect_urls = [ "http://localhost:3000/callback" ]
