@@ -134,13 +134,9 @@ export class ProcedureExecutor {
   }
 
   async applyChanges(execution, products, changes, procedure) {
-    let updated = 0;
-    let failed = 0;
-    const errors = [];
-
     const processor = async (batch) => {
       const mutations = this.mutationBuilder.buildBatchMutations(batch, changes);
-      const results = [];
+      const batchResults = [];
 
       for (const mutation of mutations) {
         try {
@@ -153,52 +149,54 @@ export class ProcedureExecutor {
             );
           }
 
-          results.push({ success: true, data });
+          if (!data) {
+            throw new Error("No data returned from mutation");
+          }
+
+          const mutationKeys = Object.keys(data).filter((k) => k !== "__typename");
+          for (const key of mutationKeys) {
+            const result = data[key];
+            const userErrors = result?.userErrors || [];
+
+            if (userErrors.length > 0) {
+              batchResults.push({
+                success: false,
+                error: userErrors.map((e) => e.message).join(", ")
+              });
+            } else if (result?.product?.id) {
+              batchResults.push({ success: true, productId: result.product.id });
+            } else {
+              batchResults.push({ success: false, error: "No product returned from mutation" });
+            }
+          }
         } catch (err) {
-          results.push({ success: false, error: err.message });
+          batchResults.push({ success: false, error: err.message });
         }
       }
 
-      return { results, errors: [] };
+      return { results: batchResults, errors: [] };
     };
 
-    const batchResult = await this.batchProcessor.processBatches(
-      products,
-      processor,
-      async (progress) => {
-        updated = progress.processed;
-      }
-    );
+    const batchResult = await this.batchProcessor.processBatches(products, processor);
 
-    updated = batchResult.processed;
-    failed = batchResult.errors.length;
+    const updated = batchResult.results.filter((r) => r.success).length;
+    const failed = batchResult.results.filter((r) => !r.success).length;
+    const errors = batchResult.results.filter((r) => !r.success).map((r) => ({ message: r.error }));
 
-    if (batchResult.errors.length > 0) {
-      errors.push(...batchResult.errors);
-    }
-
-    await this.logResults(execution.id, products, errors);
+    await this.logResults(execution.id, batchResult.results);
 
     return { updated, failed, errors };
   }
 
-  async logResults(executionId, products, errors) {
-    const logs = [];
-
-    for (const product of products) {
-      const productErrors = errors.filter((e) =>
-        e.items?.some((item) => item.id === product.id)
-      );
-
-      logs.push({
-        procedureId: product.id,
-        executionId,
-        shop: this.shop,
-        productId: product.id,
-        message: productErrors.length > 0 ? productErrors[0].error : "Updated successfully",
-        status: productErrors.length > 0 ? "error" : "success",
-      });
-    }
+  async logResults(executionId, results) {
+    const logs = results.map((result) => ({
+      procedureId: result.productId || "unknown",
+      executionId,
+      shop: this.shop,
+      productId: result.productId || "unknown",
+      message: result.error || "Updated successfully",
+      status: result.success ? "success" : "error",
+    }));
 
     if (logs.length > 0) {
       await prisma.procedureLog.createMany({
