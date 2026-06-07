@@ -10,7 +10,7 @@ export class GraphQLMutationBuilder {
       allMutations.push(...productMutations);
 
       if (variantId && this.hasVariantChanges(changes)) {
-        const variantMutation = this.buildVariantMutation(variantId, changes, `m${baseIdx + 1}`);
+        const variantMutation = this.buildVariantMutationAlt(variantId, changes, `m${baseIdx + 1}`);
         if (variantMutation) {
           allMutations.push(variantMutation);
         }
@@ -65,6 +65,45 @@ export class GraphQLMutationBuilder {
         message
       }
     }`;
+  }
+
+  buildVariantMutationAlt(variantId, changes, alias) {
+    const variantInput = this.buildVariantInputAlt(variantId, changes);
+    if (!variantInput) return null;
+
+    return `${alias}: variantUpdate(input: ${variantInput}) {
+      productVariant {
+        id
+        price
+        compareAtPrice
+      }
+      userErrors {
+        field
+        message
+      }
+    }`;
+  }
+
+  buildVariantInputAlt(variantId, changes) {
+    const fields = [];
+    fields.push(`id: "${variantId}"`);
+
+    if (changes.fields?.price) {
+      const price = parseFloat(changes.fields.price.value);
+      if (!isNaN(price)) {
+        fields.push(`price: "${price.toFixed(2)}"`);
+      }
+    }
+
+    if (changes.fields?.compareAtPrice) {
+      const comparePrice = parseFloat(changes.fields.compareAtPrice.value);
+      if (!isNaN(comparePrice)) {
+        fields.push(`compareAtPrice: "${comparePrice.toFixed(2)}"`);
+      }
+    }
+
+    if (fields.length === 1) return null;
+    return `{ ${fields.join(", ")} }`;
   }
 
   buildVariantInput(variantId, changes) {
