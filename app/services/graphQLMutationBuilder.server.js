@@ -1,7 +1,7 @@
 export class GraphQLMutationBuilder {
-  buildUpdateMutation(productIds, changes) {
-    const mutations = productIds.map((productId, idx) =>
-      this.buildSingleProductMutation(productId, changes, `m${idx}`)
+  buildUpdateMutation(products, changes) {
+    const mutations = products.map((product, idx) =>
+      this.buildSingleProductMutation(product, changes, `m${idx}`)
     );
 
     return `#graphql
@@ -11,14 +11,15 @@ export class GraphQLMutationBuilder {
     `;
   }
 
-  buildSingleProductMutation(productId, changes, alias) {
-    const input = this.buildUpdateInput(productId, changes);
+  buildSingleProductMutation(product, changes, alias) {
+    const input = this.buildUpdateInput(product, changes);
 
     return `${alias}: productUpdate(input: ${input}) {
       product {
         id
         title
         vendor
+        tags
       }
       userErrors {
         field
@@ -27,33 +28,70 @@ export class GraphQLMutationBuilder {
     }`;
   }
 
-  buildUpdateInput(productId, changes) {
+  buildUpdateInput(product, changes) {
     const fields = [];
 
-    fields.push(`id: "${productId}"`);
+    fields.push(`id: "${product.id}"`);
 
     if (changes.fields) {
-      const fieldUpdates = this.buildFieldUpdates(changes.fields);
+      const fieldUpdates = this.buildFieldUpdates(product, changes.fields);
       fields.push(...fieldUpdates);
     }
 
     return `{ ${fields.join(", ")} }`;
   }
 
-  buildFieldUpdates(fields) {
+  buildFieldUpdates(product, fields) {
     const updates = [];
+    const variantId = this.getFirstVariantId(product);
+    const variantUpdates = {};
 
     for (const [field, change] of Object.entries(fields)) {
-      const update = this.buildFieldUpdate(field, change);
+      const update = this.buildFieldUpdate(field, change, product, variantId);
       if (update) {
-        updates.push(update);
+        if (field === "price" || field === "compareAtPrice") {
+          const parsed = this.parseVariantUpdate(update);
+          if (parsed) {
+            Object.assign(variantUpdates, parsed);
+          }
+        } else {
+          updates.push(update);
+        }
       }
+    }
+
+    if (Object.keys(variantUpdates).length > 0) {
+      const variantUpdate = `variants: [{ id: "${variantId}", ${Object.entries(variantUpdates)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(", ")} }]`;
+      updates.push(variantUpdate);
     }
 
     return updates;
   }
 
-  buildFieldUpdate(field, change) {
+  parseVariantUpdate(update) {
+    const match = update.match(/variants: \[{ id: "[^"]+", ([^}]+) }\]/);
+    if (match) {
+      const pairs = match[1].split(",").map((p) => p.trim());
+      const result = {};
+      pairs.forEach((pair) => {
+        const [key, value] = pair.split(":").map((s) => s.trim());
+        result[key] = value;
+      });
+      return result;
+    }
+    return null;
+  }
+
+  getFirstVariantId(product) {
+    if (product.variants?.edges?.[0]?.node?.id) {
+      return product.variants.edges[0].node.id;
+    }
+    return null;
+  }
+
+  buildFieldUpdate(field, change, product, variantId) {
     const { action, value } = change;
 
     switch (field) {
@@ -62,11 +100,11 @@ export class GraphQLMutationBuilder {
       case "vendor":
         return this.buildVendorUpdate(action, value);
       case "price":
-        return null;
+        return this.buildPriceUpdate(action, value, variantId);
       case "compareAtPrice":
-        return null;
+        return this.buildCompareAtPriceUpdate(action, value, variantId);
       case "tags":
-        return null;
+        return this.buildTagsUpdate(action, value, product);
       case "collection":
         return null;
       case "metaTitle":
@@ -128,6 +166,54 @@ export class GraphQLMutationBuilder {
     }
   }
 
+  buildPriceUpdate(action, value, variantId) {
+    if (!value || !variantId) return null;
+
+    const price = parseFloat(value);
+    if (isNaN(price)) return null;
+
+    return `variants: [{ id: "${variantId}", price: "${price.toFixed(2)}" }]`;
+  }
+
+  buildCompareAtPriceUpdate(action, value, variantId) {
+    if (!value || !variantId) return null;
+
+    let comparePrice;
+    if (action === "calculate_from_price") {
+      comparePrice = parseFloat(value);
+    } else {
+      comparePrice = parseFloat(value);
+    }
+
+    if (isNaN(comparePrice)) return null;
+
+    return `variants: [{ id: "${variantId}", compareAtPrice: "${comparePrice.toFixed(2)}" }]`;
+  }
+
+  buildTagsUpdate(action, value, product) {
+    if (!Array.isArray(value) || value.length === 0) return null;
+
+    const currentTags = product.tags || [];
+    let newTags = currentTags;
+
+    switch (action) {
+      case "set":
+        newTags = value;
+        break;
+      case "add":
+        newTags = [...new Set([...currentTags, ...value])];
+        break;
+      case "remove":
+        newTags = currentTags.filter((tag) => !value.includes(tag));
+        break;
+      default:
+        return null;
+    }
+
+    const tagString = newTags.join(", ");
+    return `tags: "${this.escapeString(tagString)}"`;
+  }
+
   escapeString(value) {
     if (typeof value !== "string") {
       value = String(value);
@@ -140,10 +226,7 @@ export class GraphQLMutationBuilder {
 
     for (let i = 0; i < products.length; i += batchSize) {
       const batch = products.slice(i, i + batchSize);
-      const mutation = this.buildUpdateMutation(
-        batch.map((p) => p.id),
-        changes
-      );
+      const mutation = this.buildUpdateMutation(batch, changes);
       batches.push(mutation);
     }
 
