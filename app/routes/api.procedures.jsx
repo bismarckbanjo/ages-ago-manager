@@ -1,0 +1,41 @@
+import { json } from "react-router";
+import { authenticate } from "../shopify.server";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
+
+export async function loader({ request }) {
+  const { session } = await authenticate.admin(request);
+  const procedures = await prisma.procedure.findMany({
+    where: { shop: session.shop },
+    orderBy: { createdAt: "desc" },
+  });
+  return json(procedures);
+}
+
+export async function action({ request }) {
+  const { session } = await authenticate.admin(request);
+
+  if (request.method === "POST") {
+    const { name, filters, changes } = await request.json();
+    const procedure = await prisma.procedure.create({
+      data: {
+        shop: session.shop,
+        name,
+        filters,
+        changes,
+      },
+    });
+    return json(procedure, { status: 201 });
+  }
+
+  if (request.method === "DELETE") {
+    const { id } = await request.json();
+    await prisma.procedure.delete({
+      where: { id },
+    });
+    return json({ success: true });
+  }
+
+  return json({ error: "Method not allowed" }, { status: 405 });
+}
