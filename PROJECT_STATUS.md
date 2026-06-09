@@ -1,5 +1,14 @@
 # Ages Ago Manager - Project Status
 
+> **Current status (2026-06-09): LIVE and in active use.** OAuth is connected,
+> the offline token is stored, and the bulk editor works end-to-end (filter →
+> preview → apply) with multi-variant pricing, run history, and apply safeguards.
+> The "Remaining to go live" / "Next Steps" sections below are **historical** and
+> now resolved. For the authoritative architecture + deploy flow see
+> `LLM_START_HERE.md`; for recent changes see `CHANGELOG.md`; for open items see
+> `CODE_AUDIT_2026-06-09.md` (notably: the app is currently unauthenticated by
+> deliberate choice).
+
 ## Goal
 Build a procedure-driven bulk product editor for Shopify (agesagoapparel.com store). The app should:
 - Be easy to launch and always accessible
@@ -93,12 +102,13 @@ the correct approach; it was failing on fixable bugs:
 - App client id: `854c8d52c41c3b46fdec5892bd7be4c0` (app name `ages-ago-manager`, version `-4` active)
 - Dev Dashboard org: `163864766`
 
-### Remaining to go live
-1. Whitelist redirect URL `https://ages-ago-manager.vercel.app/api/auth/callback` on the app (Dev Dashboard).
-2. Confirm Vercel env: `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `SHOPIFY_APP_URL`, `DATABASE_URL`.
-3. Push to git → Vercel auto-deploys.
-4. Visit the app → "Connect / reauthorize Shopify" once → install → token stored.
-5. Test filter → preview → apply. Then delete the two duplicate apps.
+### Remaining to go live — ✅ DONE (historical)
+All of the following were completed; the app is live and authorized:
+1. ~~Whitelist redirect URL~~ — done.
+2. ~~Confirm Vercel env vars~~ — done.
+3. ~~Push to git → Vercel auto-deploys~~ — this is now the standard flow.
+4. ~~One-time Connect → token stored~~ — done; offline token in DB.
+5. ~~Test filter → preview → apply~~ — working in production.
 
 ## Architecture
 
@@ -131,13 +141,21 @@ Database (Neon Postgres)
 - **Redirect URLs:** (should be) `https://ages-ago-manager.vercel.app/api/auth/callback`
 - **Mode:** Non-embedded
 
-## Next Steps Needed
-1. **Verify Shopify app configuration** - Confirm the correct app in Partner dashboard has the right redirect URI whitelisted
-2. **Consider alternative approaches:**
-   - Use Shopify's new OAuth implementation pattern for non-embedded apps
-   - Use a custom OAuth flow that doesn't rely on Shopify CLI
-   - Switch to a different auth method entirely
-3. **Once OAuth works:** Test the full workflow (filter → preview → apply)
+## Recent Work (2026-06-09)
+
+Post-launch hardening after a code audit (`CODE_AUDIT_2026-06-09.md`):
+- Multi-variant pricing (price/compare-at apply to every variant).
+- Run history recorded per Apply + a Run History panel on the dashboard.
+- Clear compare-at price (end sale); confirm dialog + empty-filter guard.
+- Catalog scan cap (10,000) with truncation warning; throttle retry/backoff.
+
+## Open Items (see CODE_AUDIT_2026-06-09.md for detail)
+1. **No authentication** on the app/API routes — deferred by the owner; revisit
+   (Vercel password protection is the lightest fix).
+2. `filter-values` uses deprecated `Shop.productTags/Types/Vendors` — migrate to
+   `QueryRoot.*` before a future API version removes them.
+3. Per-product apply is non-atomic (product update can commit while a variant
+   update fails).
 
 ## Files Changed
 - `package.json` - Removed React Router, added Next.js

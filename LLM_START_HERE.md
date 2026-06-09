@@ -46,20 +46,22 @@ Start with these. **The live "apply" logic is the route file, not the services.*
 | `app/components/SimpleQueryBuilder.tsx` | The **Filters** UI (conditions). |
 | `app/components/SimpleChangesBuilder.tsx` | The **Changes** UI: title (Replace/Append/Prepend), price, compare-at, vendor, tags (Replace/Add/Remove). Modes are stored as `<field>Mode` keys. |
 | `app/api/products/preview/route.ts` | Preview endpoint -- returns count + sample of matched products. |
-| `app/api/procedures/execute/route.ts` | **The Apply endpoint. This is the core.** Filters the catalog and runs the Shopify mutations. |
+| `app/api/procedures/execute/route.ts` | **The Apply endpoint. This is the core.** Filters the catalog, runs the Shopify mutations (multi-variant aware), records a `ProcedureExecution`, and retries on throttling. |
 | `app/api/filter-values/route.ts` | Populates the filter dropdowns with real values pulled from Shopify. |
-| `app/api/procedures/history/route.ts` | Saved procedures. |
+| `app/api/procedures/history/route.ts` | Saved procedures + their recent executions (JSON; rendered by the Run History panel on the dashboard). |
 | `lib/shopify.ts` | Admin GraphQL client, OAuth, **API version**, and the `SHOP` constant. |
-| `lib/productMatch.ts` | `fetchAllProducts()`, `matchesConditions()`, and the `NormalizedProduct` shape (id, title, vendor, type, tags[], collections, price, compareAtPrice, variantId). |
+| `lib/productMatch.ts` | `fetchAllProducts()` (returns `{ products, currencyCode, truncated }`), `fetchProductVariantIds()` (all variants of one product, used at apply time), `matchesConditions()`, `hasValidCondition()`, and the `NormalizedProduct` shape (id, title, vendor, type, tags[], collections, price, compareAtPrice, variantId — note `variantId` is the FIRST variant, for preview display only). |
 | `lib/db.ts` | Shared Prisma client. |
 | `app/api/auth/shopify/route.ts`, `app/api/auth/callback/route.ts` | One-time OAuth install (offline token stored in DB `Session` table). |
 
 ### WARNING -- Dead code, do not edit by mistake
 `app/services/*.server.js` (e.g. `graphQLMutationBuilder.server.js`,
-`procedureExecutor.server.js`) and the `app/components/*.jsx` files are leftovers
-from an earlier React-Router version. **They are NOT imported by the live app.**
-The real apply path is `app/api/procedures/execute/route.ts`. Don't waste time
-editing the services and wondering why nothing changes.
+`procedureExecutor.server.js`), `app/utils/*.js` (e.g. `errorFormatter.js`,
+`procedureValidation.js`), the `app/components/*.jsx` files, and the nested
+`ages-ago-manager/` subdirectory are all leftovers from an earlier React-Router
+version. **They are NOT imported by the live app.** The real apply path is
+`app/api/procedures/execute/route.ts`. Don't waste time editing the services and
+wondering why nothing changes.
 
 ---
 
@@ -68,6 +70,14 @@ editing the services and wondering why nothing changes.
 - **API version** is set in `lib/shopify.ts` (`API_VERSION`, default `2025-01`).
 - **Price & Compare-at price live on the VARIANT** -> updated via
   `productVariantsBulkUpdate` (input type `ProductVariantsBulkInput`).
+  - **Products are multi-variant (sizes/colors — 9 to ~70 variants each).** A
+    price/compare-at change must touch ALL variants, not just the first. The
+    execute route calls `fetchProductVariantIds()` per matched product at apply
+    time and updates every variant. We DON'T pull all variants into the main
+    catalog scan because that would blow Shopify's query-cost budget (422
+    products × ~55 variants).
+  - **Clearing compare-at** (ending a sale): the dashboard sends
+    `compareAtPriceClear: "true"`, and the route sets `compareAtPrice: null`.
 - **Title, vendor, tags live on the PRODUCT** -> updated via `productUpdate`.
   - On API 2024-10+, `productUpdate(product:)` expects **`ProductUpdateInput`**,
     NOT `ProductInput`. Using the wrong type fails at the GraphQL *validation*
@@ -86,6 +96,34 @@ editing the services and wondering why nothing changes.
 (validate before shipping). Don't guess field or type names.
 
 ---
+
+## 4b. What the app can do today
+
+- **Filters:** Collection, Tag, Title, Type, Vendor, Price with =, ≠, >, <, ≥, ≤,
+  contains, not-contains. Dropdowns are populated from real Shopify values.
+- **Changes:** Title (replace/append/prepend), Vendor (replace), Tags
+  (replace/add/remove), Price, Compare-at price, and **Clear compare-at price**.
+- **Multi-variant aware:** price/compare-at changes apply to every variant.
+- **Safety:** Preview before Apply; an Apply shows a confirm dialog with the
+  matched count; editing filters clears a stale preview; the server refuses to
+  run with no real filter (would match the whole catalog).
+- **Run History:** every Apply writes a `ProcedureExecution` (matched / updated /
+  failed + errors) and sets `Procedure.lastExecutedAt`. The dashboard has a Run
+  History panel that reads `/api/procedures/history`.
+- **Throttle handling:** mutations retry with backoff on Shopify `THROTTLED`.
+- **Catalog scan** is capped at 10,000 products; preview/results surface a
+  `truncated` warning if the cap is ever hit (current catalog is ~422).
+
+### Known limitations (intentional, not bugs)
+- **No authentication.** `/dashboard` and all API routes are publicly reachable;
+  anyone with the URL can run changes. (Deferred by the owner — see the audit.)
+- Per-product apply is **not atomic**: if the product update succeeds but the
+  variant update fails, the product change is already committed but the row is
+  counted as failed.
+- `filter-values` still uses deprecated `Shop.productTags/Types/Vendors` fields
+  (works today; migrate to `QueryRoot.*` before a future API version removes them).
+
+Full findings live in `CODE_AUDIT_2026-06-09.md`.
 
 ## 5. How to ship a change (the deploy flow)
 
@@ -128,5 +166,6 @@ reaches `state: READY`. Then have the owner reload `/dashboard` and spot-check.
 
 ---
 
-*Last updated: 2026-06-09. Keep this current -- if you change the architecture,
-deploy flow, or key files, update this file in the same commit.*
+*Last updated: 2026-06-09 (multi-variant pricing, run history, clear compare-at,
+apply guards, throttle handling, catalog cap). Keep this current -- if you change
+the architecture, deploy flow, or key files, update this file in the same commit.*

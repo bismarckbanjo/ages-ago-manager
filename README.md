@@ -1,124 +1,94 @@
 # Ages Ago Manager
 
-Shopify embedded app for managing products, inventory, and reusable bulk-edit procedures.
+A private bulk product editor for the **Ages Ago Apparel** Shopify store. Find
+products by filter (tag, type, vendor, collection, title, price) and bulk-apply
+changes (title, price, compare-at price, vendor, tags) across all matching
+products and their variants. It replaces the paid Hextom bulk-editor app.
+
+Single user, single store. Not a public Shopify app.
+
+> **New here? Read [`LLM_START_HERE.md`](./LLM_START_HERE.md) first** — it is the
+> single source of truth for architecture, key files, and the deploy flow.
 
 ## Stack
 
-- Shopify app template using React Router
-- Vercel production hosting
-- Prisma with PostgreSQL
-- Shopify Admin GraphQL API
+- **Next.js 16** (App Router, `app/` dir), **React 18** (client components)
+- **Vercel** hosting — auto-deploys on every push to `main`
+- **Prisma + Neon Postgres** (`prisma db push` runs at build)
+- **Shopify Admin GraphQL API** (version `2025-01`), OAuth offline token
 
-## Commands
+## How it works
 
-```shell
-npm run dev
+The dashboard (`/dashboard`) lets you build a filter, Preview the matched
+products, then Apply changes. Apply records each run so you can see history.
+
+```
+Browser
+   ↓
+https://ages-ago-manager.vercel.app
+   ├── GET  /dashboard                  → bulk editor UI + Run History panel
+   ├── POST /api/products/preview       → fetch & filter products (count + sample)
+   ├── POST /api/procedures/execute     → THE core: apply changes, record the run
+   ├── GET  /api/procedures/history     → saved procedures + recent executions
+   ├── GET  /api/filter-values          → dropdown values pulled from Shopify
+   ├── GET  /api/auth/shopify           → one-time OAuth install
+   └── GET  /api/auth/callback          → stores the offline token in the DB
+        ↓
+Neon Postgres (Prisma): Session, Procedure, ProcedureExecution, ProcedureLog
 ```
 
-Starts local Shopify app development through the Shopify CLI.
+## Deploy (the whole flow)
+
+**The push IS the deploy.** Vercel auto-builds every push to `main`, and the
+build runs `prisma db push`, so schema changes apply automatically.
 
 ```shell
-npm run build
+cd ~/ages-ago-manager
+git pull
+# ...make changes...
+git add -A && git commit -m "describe the change" && git push
 ```
 
-Generates Prisma Client and builds the React Router app.
+Then confirm the newest deployment reaches `READY` in the Vercel dashboard
+(project **ages-ago-manager**) and reload `/dashboard`.
+
+## Local commands
 
 ```shell
-npm run setup
+npm run dev         # next dev (local only; not needed to ship)
+npm run build       # prisma generate && prisma db push && next build
+npm run typecheck   # tsc --noEmit  ← run before pushing
+npm run lint        # eslint
 ```
 
-Generates Prisma Client and applies production database migrations.
-
-```shell
-npm run deploy
-```
-
-Deploys Shopify app configuration only. This does not deploy the Vercel app.
-
-```shell
-vercel deploy --prod --yes
-```
-
-Deploys the web app to Vercel production.
-
-## Production Environment
-
-Vercel production needs these environment variables:
+## Environment variables (set in Vercel + .env.local)
 
 ```text
-SHOPIFY_API_KEY
-SHOPIFY_API_SECRET
-SHOPIFY_APP_URL=https://ages-ago-manager.vercel.app
-SCOPES=read_products,write_products
-DATABASE_URL
-NODE_ENV=production
+SHOPIFY_API_KEY        app client id
+SHOPIFY_API_SECRET     app client secret (sensitive)
+SHOPIFY_APP_URL        https://ages-ago-manager.vercel.app  (SHOPIFY_API_URL also accepted)
+SHOPIFY_SHOP           1kfpgz-ex.myshopify.com  (permanent domain, not the custom domain)
+DATABASE_URL           Neon connection string
 ```
 
-Run Prisma migrations against production after schema changes:
+## Auth
 
-```shell
-npm run setup
-```
+One-time OAuth install: visit `/api/auth/shopify`, approve, and the resulting
+**offline** token is stored in the DB `Session` table and reused for all Admin
+API calls (offline tokens don't expire). If you ever see "No Shopify session",
+re-run that one-time connect.
 
-## Shopify Auth Callback
+## Known limitations
 
-The app sets `authPathPrefix: "/auth"` in `app/shopify.server.js`.
+- **No authentication** on `/dashboard` or the API routes — anyone with the URL
+  can run changes (intentionally deferred). See `CODE_AUDIT_2026-06-09.md`.
+- The repo contains **dead code** from an earlier React Router version
+  (`app/services/*.server.js`, `app/utils/*.js`, `app/components/*.jsx`, and a
+  nested `ages-ago-manager/` folder). It is NOT used by the live app — ignore it.
 
-Because of that, `shopify.app.toml` must use:
+## Notes for future contributors
 
-```toml
-[auth]
-redirect_urls = [ "https://ages-ago-manager.vercel.app/auth/callback" ]
-```
-
-Do not change this back to `/callback`; that route does not match the current Shopify auth setup.
-
-## Vercel Crash Note
-
-If Vercel logs show this error:
-
-```text
-SyntaxError: Named export 'json' not found. The requested module 'react-router' is a CommonJS module
-```
-
-Do not import `json` from `react-router`.
-
-Use:
-
-```js
-return Response.json(data);
-return Response.json(data, { status: 201 });
-```
-
-instead of:
-
-```js
-import { json } from "react-router";
-return json(data);
-```
-
-After changing this, run:
-
-```shell
-npm run build
-```
-
-Then confirm the generated server bundle does not import `json` from `react-router`:
-
-```shell
-rg -n "json.*from \"react-router\"|import \\{[^}]*json" build/server/index.js app
-```
-
-## Deploy Checklist
-
-1. Run `npm run build`.
-2. If `shopify.app.toml` changed, run `npm run deploy`.
-3. If app source changed, run `vercel deploy --prod --yes`.
-4. Check Vercel runtime logs if production still returns `FUNCTION_INVOCATION_FAILED`.
-
-## Notes For Future LLMs
-
-- This repo may contain uncommitted local fixes. Check `git status --short` before assuming Vercel has the latest code.
-- `npm run deploy` and `vercel deploy --prod --yes` deploy different things.
-- A passing local build does not mean production has been redeployed.
-- Keep docs project-specific; avoid restoring upstream template README sections unless they are directly useful.
+- Check `git status --short` before assuming Vercel has the latest code.
+- A passing local build does not mean production is redeployed — push to `main`.
+- Before changing GraphQL, look up exact types with the Shopify schema/validation
+  tools; don't guess field or input-type names.

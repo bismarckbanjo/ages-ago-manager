@@ -1,71 +1,53 @@
 # Project Notes For LLM Agents
 
-Keep responses brief and action-oriented. The owner is not a professional developer and prefers one realistic next command at a time.
+Keep responses brief and action-oriented. The owner is not a professional
+developer and prefers one realistic next command at a time.
 
-## Project Facts
+**Read [`LLM_START_HERE.md`](./LLM_START_HERE.md) first.** It is the single source
+of truth for what this is, where it lives, the key files, and the deploy flow.
+This file is just a quick orientation; if the two ever disagree, fix both.
 
-- App name: Ages Ago Manager
-- Purpose: Shopify embedded app for product, inventory, and bulk-edit procedure management
-- Runtime: React Router app hosted on Vercel
-- Database: Prisma with PostgreSQL
-- Main branch: `main`
+## Project facts
 
-## Important Commands
+- App name: **Ages Ago Manager** — private bulk product editor for the Ages Ago
+  Apparel Shopify store (single user, single store; not a public app).
+- Stack: **Next.js 16 (App Router) + React 18**, hosted on **Vercel**.
+- Database: **Prisma + Neon Postgres** (`prisma db push` runs at build).
+- Shopify: **Admin GraphQL API `2025-01`**, OAuth offline token in the DB.
+- Main branch: `main`. **Pushing to `main` auto-deploys to Vercel.**
 
-```shell
-npm run build
-```
+## The core file
 
-Use this to verify source changes.
+The live "apply" logic is **`app/api/procedures/execute/route.ts`** — not the
+`app/services/*.server.js` / `app/utils/*.js` / `*.jsx` files, which are dead
+code from an old React Router version. Editing the dead code changes nothing.
 
-```shell
-npm run deploy
-```
+## Shipping a change
 
-This deploys Shopify app configuration only.
-
-```shell
-vercel deploy --prod --yes
-```
-
-This deploys the Vercel production web app.
-
-Do not confuse Shopify deploys with Vercel deploys.
-
-## Known Production Fixes
-
-Vercel crashed with:
-
-```text
-SyntaxError: Named export 'json' not found. The requested module 'react-router' is a CommonJS module
-```
-
-Fix: do not import `json` from `react-router`. Use `Response.json(...)`.
-
-Shopify auth uses:
-
-```js
-authPathPrefix: "/auth"
-```
-
-So `shopify.app.toml` must use:
-
-```toml
-redirect_urls = [ "https://ages-ago-manager.vercel.app/auth/callback" ]
-```
-
-## Before Debugging Vercel
-
-1. Check local changes:
+The LLM cannot push (no GitHub connector). Make the edits, verify
+(`npm run typecheck`, validate any GraphQL against the Shopify schema), then hand
+the owner:
 
 ```shell
-git status --short
+cd ~/ages-ago-manager
+git pull
+git add -A && git commit -m "describe the change" && git push
 ```
 
-2. Check whether the built server bundle still imports bad symbols:
+Then confirm the newest deployment for project **ages-ago-manager** reaches
+`READY` in Vercel, and have the owner reload `/dashboard`.
 
-```shell
-rg -n "json.*from \"react-router\"|import \\{[^}]*json" build/server/index.js app
-```
+## Shopify gotchas (these bite)
 
-3. If source changed but production logs still show old code, deploy to Vercel.
+- Price / compare-at live on the **variant** → `productVariantsBulkUpdate`.
+  Products are multi-variant (sizes); a price change must touch ALL variants.
+- Title / vendor / tags live on the **product** → `productUpdate` with
+  **`ProductUpdateInput`** (NOT `ProductInput`) on API 2024-10+.
+- Always check **both** top-level `result.errors` AND `userErrors` after a
+  mutation (the route's `collectErrors()` helper does both).
+
+## Before debugging
+
+1. `git status --short` — check for uncommitted local changes.
+2. `npm run typecheck` — catch type errors before they fail the Vercel build.
+3. If source changed but production looks old, confirm it was pushed to `main`.

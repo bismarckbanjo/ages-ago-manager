@@ -1,5 +1,36 @@
 # Changelog
 
+> Entries from 2026-06-07 and earlier describe the **old React Router version**
+> and its now-dead `app/services` / `app/utils` / `*.jsx` code. The live app is
+> Next.js; the apply path is `app/api/procedures/execute/route.ts`. See
+> `LLM_START_HERE.md`.
+
+## 2026-06-09 (Bulk-editor hardening — Next.js app)
+
+Following a code audit (`CODE_AUDIT_2026-06-09.md`):
+
+- **Multi-variant pricing (H2):** price and compare-at changes now apply to
+  **every variant** of each matched product (sizes/colors), not just the first.
+  `lib/productMatch.ts` gained `fetchProductVariantIds()`, called per matched
+  product at apply time to avoid blowing Shopify's query-cost budget.
+- **Run history (H3):** each Apply now writes a `ProcedureExecution` row
+  (matched / updated / failed + errors) and sets `Procedure.lastExecutedAt`. A
+  new **Run History** panel on the dashboard renders `/api/procedures/history`.
+  Execution errors are stored as a proper JSON array.
+- **Clear compare-at price (M1):** new checkbox ("end sale") sends
+  `compareAtPriceClear`; the route sets `compareAtPrice: null` on all variants.
+- **Apply safety (M2/M3):** confirm dialog showing the matched count before a
+  destructive Apply; editing filters clears a stale preview; the server refuses
+  to run with no real filter (would otherwise match the whole catalog).
+- **Catalog cap (M4):** scan cap raised to 10,000 with a `truncated` warning
+  surfaced in preview and results.
+- **Throttle handling (M5):** mutations retry with backoff on Shopify
+  `THROTTLED` responses.
+- **Docs:** refreshed `LLM_START_HERE.md`, `README.md`, `AGENTS.md`,
+  `PROJECT_STATUS.md`; added `CODE_AUDIT_2026-06-09.md`.
+- Verified: `tsc --noEmit` clean; all GraphQL validated against the live schema;
+  Vercel build `READY`.
+
 ## 2026-06-07 (UX Enhancements: Collections Sync & Preview)
 
 - **Collections Dropdown**: Added `/api/collections` endpoint to fetch actual collections from store. Collection filter now shows dropdown instead of text input.
