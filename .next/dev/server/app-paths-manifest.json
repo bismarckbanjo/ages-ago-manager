@@ -1,0 +1,4 @@
+{
+  "/api/auth/shopify/route": "app/api/auth/shopify/route.js",
+  "/page": "app/page.js"
+}

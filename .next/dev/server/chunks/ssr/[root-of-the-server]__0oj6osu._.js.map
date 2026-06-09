@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 10, "column": 0}, "map": {"version":3,"sources":["file:///Users/michaellast/ages-ago-manager/app/page.tsx"],"sourcesContent":["import { redirect } from \"next/navigation\";\nimport { cookies } from \"next/headers\";\n\nexport default async function Home() {\n  const cookieStore = await cookies();\n  const shop = cookieStore.get(\"shop\")?.value;\n\n  if (shop) {\n    redirect(\"/dashboard\");\n  }\n\n  return (\n    <main style={{ padding: \"40px\" }}>\n      <h1>Ages Ago Manager</h1>\n      <p>Bulk product editor for Shopify</p>\n      <a href=\"/api/auth/shopify?shop=agesagoapparel.com\">\n        <button style={{ padding: \"10px 20px\", fontSize: \"16px\" }}>\n          Connect to Shopify\n        </button>\n      </a>\n    </main>\n  );\n}\n"],"names":["Home","cookieStore","shop","get","value","style","padding","href","fontSize"],"mappings":";;;;;AAAA;AAAA;AACA;;;;AAEe,eAAeA;IAC5B,MAAMC,cAAc,MAAM,IAAA,oKAAO;IACjC,MAAMC,OAAOD,YAAYE,GAAG,CAAC,SAASC;IAEtC,IAAIF,MAAM;QACR,IAAA,2NAAQ,EAAC;IACX;IAEA,qBACE,wQAAC;QAAKG,OAAO;YAAEC,SAAS;QAAO;;0BAC7B,wQAAC;0BAAG;;;;;;0BACJ,wQAAC;0BAAE;;;;;;0BACH,wQAAC;gBAAEC,MAAK;0BACN,cAAA,wQAAC;oBAAOF,OAAO;wBAAEC,SAAS;wBAAaE,UAAU;oBAAO;8BAAG;;;;;;;;;;;;;;;;;AAMnE"}}]
+}

@@ -1,0 +1,3 @@
+module.exports=[26443,(a,b,c)=>{let{createClientModuleProxy:d}=a.r(36819);a.n(d("[project]/ages-ago-manager/node_modules/next/dist/client/components/builtin/global-error.js <module evaluation>"))},82322,(a,b,c)=>{let{createClientModuleProxy:d}=a.r(36819);a.n(d("[project]/ages-ago-manager/node_modules/next/dist/client/components/builtin/global-error.js"))},8372,a=>{"use strict";a.i(26443);var b=a.i(82322);a.n(b)},86277,a=>{a.n(a.i(8372))}];
+
+//# sourceMappingURL=09_z_next_dist_client_components_builtin_global-error_1al94h4.js.map

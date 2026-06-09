@@ -1,0 +1,13 @@
+var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/dashboard/page.js")
+R.c("server/chunks/ssr/[root-of-the-server]__1ne156i._.js")
+R.c("server/chunks/ssr/09_z_next_dist_esm_build_templates_app-page_102wycd.js")
+R.c("server/chunks/ssr/[root-of-the-server]__1xi307o._.js")
+R.c("server/chunks/ssr/[root-of-the-server]__0vd_dnj._.js")
+R.c("server/chunks/ssr/ages-ago-manager_app_layout_tsx_09jzhl9._.js")
+R.c("server/chunks/ssr/09_z_next_dist_client_components_0oi3bs0._.js")
+R.c("server/chunks/ssr/09_z_next_dist_client_components_builtin_forbidden_18e1xrl.js")
+R.c("server/chunks/ssr/09_z_next_dist_client_components_builtin_unauthorized_151e_4a.js")
+R.c("server/chunks/ssr/09_z_next_dist_client_components_builtin_global-error_1al94h4.js")
+R.c("server/chunks/ssr/ages-ago-manager__next-internal_server_app_dashboard_page_actions_1hmgzwy.js")
+R.m(43006)
+module.exports=R.m(43006).exports

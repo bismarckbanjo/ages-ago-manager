@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 10, "column": 0}, "map": {"version":3,"sources":["file:///Users/michaellast/ages-ago-manager/app/dashboard/page.tsx"],"sourcesContent":["import { cookies } from \"next/headers\";\nimport { redirect } from \"next/navigation\";\n\nexport default async function Dashboard() {\n  const cookieStore = await cookies();\n  const shop = cookieStore.get(\"shop\")?.value;\n\n  if (!shop) {\n    redirect(\"/\");\n  }\n\n  return (\n    <main style={{ padding: \"40px\" }}>\n      <h1>Dashboard</h1>\n      <p>Shop: {shop}</p>\n      <p>Bulk editor coming soon...</p>\n    </main>\n  );\n}\n"],"names":["Dashboard","cookieStore","shop","get","value","style","padding"],"mappings":";;;;;AAAA;AACA;AAAA;;;;AAEe,eAAeA;IAC5B,MAAMC,cAAc,MAAM,IAAA,oKAAO;IACjC,MAAMC,OAAOD,YAAYE,GAAG,CAAC,SAASC;IAEtC,IAAI,CAACF,MAAM;QACT,IAAA,2NAAQ,EAAC;IACX;IAEA,qBACE,wQAAC;QAAKG,OAAO;YAAEC,SAAS;QAAO;;0BAC7B,wQAAC;0BAAG;;;;;;0BACJ,wQAAC;;oBAAE;oBAAOJ;;;;;;;0BACV,wQAAC;0BAAE;;;;;;;;;;;;AAGT"}}]
+}
