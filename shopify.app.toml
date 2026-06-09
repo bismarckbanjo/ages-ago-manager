@@ -3,7 +3,7 @@
 client_id = "854c8d52c41c3b46fdec5892bd7be4c0"
 name = "ages-ago-manager"
 application_url = "https://ages-ago-manager.vercel.app"
-embedded = true
+embedded = false
 
 [build]
 automatically_update_urls_on_dev = true
