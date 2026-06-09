@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient, SHOP } from "@/lib/shopify";
 import { prisma } from "@/lib/db";
+import { fetchAllProducts, matchesConditions } from "@/lib/productMatch";
 
 const VARIANT_UPDATE = `#graphql
   mutation UpdateVariantPrice($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
@@ -18,38 +19,6 @@ const PRODUCT_UPDATE = `#graphql
     }
   }`;
 
-function matchesConditions(product: any, conditions: any[]) {
-  if (!conditions || conditions.length === 0) return true;
-
-  return conditions.every((cond) => {
-    if (!cond.field || !cond.operator || cond.value === "") return true;
-
-    const fieldValue = String(product[cond.field.toLowerCase()] || "").toLowerCase();
-    const condValue = String(cond.value).toLowerCase();
-
-    switch (cond.operator) {
-      case "equals":
-        return fieldValue === condValue;
-      case "notEquals":
-        return fieldValue !== condValue;
-      case "greaterThan":
-        return parseFloat(fieldValue) > parseFloat(condValue);
-      case "lessThan":
-        return parseFloat(fieldValue) < parseFloat(condValue);
-      case "greaterOrEqual":
-        return parseFloat(fieldValue) >= parseFloat(condValue);
-      case "lessOrEqual":
-        return parseFloat(fieldValue) <= parseFloat(condValue);
-      case "contains":
-        return fieldValue.includes(condValue);
-      case "notContains":
-        return !fieldValue.includes(condValue);
-      default:
-        return true;
-    }
-  });
-}
-
 export async function POST(request: NextRequest) {
   try {
     const shop = SHOP;
@@ -65,89 +34,51 @@ export async function POST(request: NextRequest) {
 
     const admin = getAdminClient();
 
-    // Fetch products
-    const productsQuery = `#graphql
-      query BulkEditProducts {
-        products(first: 50, sortKey: TITLE) {
-          edges {
-            node {
-              id
-              title
-              vendor
-              tags
-              variants(first: 1) {
-                edges { node { id price compareAtPrice } }
-              }
-            }
-          }
-        }
-      }`;
-
-    const { data } = await admin.graphql(productsQuery);
-    let products = data?.products?.edges ?? [];
-
-    // Map to simpler format for filtering
-    const productsForFiltering = products.map(({ node }: any) => ({
-      id: node.id,
-      title: node.title,
-      vendor: node.vendor,
-      tags: (node.tags ?? []).join(", "),
-    }));
-
-    // Filter by conditions
-    const matchingProducts = products.filter(({ node }: any, i: number) =>
-      matchesConditions(productsForFiltering[i], conditions)
+    // Fetch the full catalog and filter with the same logic as the preview.
+    const { products } = await fetchAllProducts(admin);
+    const matchingProducts = products.filter((p) =>
+      matchesConditions(p, conditions)
     );
 
     let updated = 0;
     let failed = 0;
 
-    // Apply changes to each matching product
-    for (const { node: product } of matchingProducts) {
+    for (const product of matchingProducts) {
       try {
-        const updates: any = {
-          id: product.id,
-        };
+        const updates: any = { id: product.id };
 
         if (changes.title) updates.title = changes.title;
         if (changes.vendor) updates.vendor = changes.vendor;
-        if (changes.tags) updates.tags = changes.tags.split(",").map((t: string) => t.trim());
+        if (changes.tags)
+          updates.tags = changes.tags.split(",").map((t: string) => t.trim());
 
-        // Update product fields
+        // Update product-level fields if any were provided.
         if (Object.keys(updates).length > 1) {
           const result = await admin.graphql(PRODUCT_UPDATE, {
             variables: { product: updates },
           });
-
-          if (result.data?.productUpdate?.userErrors?.length > 0) {
+          if (result?.data?.productUpdate?.userErrors?.length > 0) {
             failed++;
             continue;
           }
         }
 
-        // Update variant price if needed
-        if (changes.price || changes.compareAtPrice) {
-          const variant = product.variants.edges[0]?.node;
-          if (variant) {
-            const variantUpdates: any = {
-              id: variant.id,
-            };
+        // Update variant price / compareAtPrice if requested.
+        if ((changes.price || changes.compareAtPrice) && product.variantId) {
+          const variantUpdates: any = { id: product.variantId };
+          if (changes.price) variantUpdates.price = changes.price;
+          if (changes.compareAtPrice)
+            variantUpdates.compareAtPrice = changes.compareAtPrice;
 
-            if (changes.price) variantUpdates.price = changes.price;
-            if (changes.compareAtPrice)
-              variantUpdates.compareAtPrice = changes.compareAtPrice;
-
-            const result = await admin.graphql(VARIANT_UPDATE, {
-              variables: {
-                productId: product.id,
-                variants: [variantUpdates],
-              },
-            });
-
-            if (result.data?.productVariantsBulkUpdate?.userErrors?.length > 0) {
-              failed++;
-              continue;
-            }
+          const result = await admin.graphql(VARIANT_UPDATE, {
+            variables: {
+              productId: product.id,
+              variants: [variantUpdates],
+            },
+          });
+          if (result?.data?.productVariantsBulkUpdate?.userErrors?.length > 0) {
+            failed++;
+            continue;
           }
         }
 
@@ -158,7 +89,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Save procedure to database
     await prisma.procedure.upsert({
       where: { shop_name: { shop, name } },
       create: {
