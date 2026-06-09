@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Filter products based on conditions
-    products = products.filter((p) => matchesConditions(p, conditions));
+    products = products.filter((p: any) => matchesConditions(p, conditions));
 
     return NextResponse.json({
       currencyCode: data?.shop?.currencyCode ?? "USD",
