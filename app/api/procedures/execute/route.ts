@@ -278,7 +278,7 @@ export async function POST(request: NextRequest) {
           productsMatched: matchingProducts.length,
           productsUpdated: updated,
           productsFailed: failed,
-          errors: errors.length > 0 ? JSON.stringify(errors.slice(0, 50)) : undefined,
+          errors: errors.length > 0 ? errors.slice(0, 50) : undefined,
           completedAt: new Date(),
         },
       });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SimpleQueryBuilder } from "../components/SimpleQueryBuilder";
 import { SimpleChangesBuilder } from "../components/SimpleChangesBuilder";
 
@@ -14,6 +14,27 @@ interface Condition {
 // admin otherwise, so expose an explicit link in the header.
 const ADMIN_URL = "https://admin.shopify.com/store/1kfpgz-ex";
 
+function formatWhen(value: string | null | undefined): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
+}
+
+// errors is stored as a JSON array; tolerate a legacy stringified array too.
+function normalizeErrors(errors: any): string[] {
+  if (!errors) return [];
+  if (Array.isArray(errors)) return errors.map(String);
+  if (typeof errors === "string") {
+    try {
+      const parsed = JSON.parse(errors);
+      return Array.isArray(parsed) ? parsed.map(String) : [errors];
+    } catch {
+      return [errors];
+    }
+  }
+  return [];
+}
+
 export default function Dashboard() {
   const [procedureName, setProcedureName] = useState("");
   const [conditions, setConditions] = useState<Condition[]>([
@@ -23,6 +44,27 @@ export default function Dashboard() {
   const [preview, setPreview] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const [history, setHistory] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [showHistory, setShowHistory] = useState(true);
+
+  const loadHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await fetch("/api/procedures/history");
+      const data = await res.json();
+      setHistory(Array.isArray(data.procedures) ? data.procedures : []);
+    } catch (err) {
+      console.error("Failed to load history", err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
 
   // Editing the filters invalidates a previous preview, so clear it. This stops
   // an Apply from running against a stale match set (e.g. a now-empty filter).
@@ -110,6 +152,8 @@ export default function Dashboard() {
           setChanges({});
           setPreview(null);
         }
+        // Refresh the run history so this run shows up immediately.
+        loadHistory();
       } else {
         setError(result.error || "Failed to apply changes");
       }
@@ -272,6 +316,149 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {/* Run history */}
+        <div style={{ marginTop: "48px", borderTop: "1px solid #eee", paddingTop: "24px" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "12px",
+            }}
+          >
+            <h3 style={{ margin: 0 }}>Run History</h3>
+            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+              <button
+                onClick={loadHistory}
+                disabled={historyLoading}
+                style={{
+                  padding: "6px 12px",
+                  background: "#e0e0e0",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: historyLoading ? "default" : "pointer",
+                  fontSize: "13px",
+                }}
+              >
+                {historyLoading ? "Refreshing…" : "Refresh"}
+              </button>
+              <button
+                onClick={() => setShowHistory((s) => !s)}
+                style={{
+                  padding: "6px 12px",
+                  background: "transparent",
+                  border: "1px solid #ccc",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: "13px",
+                }}
+              >
+                {showHistory ? "Hide" : "Show"}
+              </button>
+            </div>
+          </div>
+
+          {showHistory && (
+            <div style={{ marginTop: "16px" }}>
+              {!historyLoading && history.length === 0 && (
+                <p style={{ color: "#666", fontSize: "14px" }}>
+                  No procedures have been run yet.
+                </p>
+              )}
+
+              {history.map((proc: any) => (
+                <div
+                  key={proc.id}
+                  style={{
+                    border: "1px solid #eee",
+                    borderRadius: "6px",
+                    padding: "16px",
+                    marginBottom: "16px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: "12px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <strong style={{ fontSize: "15px" }}>{proc.name}</strong>
+                    <span style={{ fontSize: "13px", color: "#666" }}>
+                      Last run: {formatWhen(proc.lastExecutedAt)}
+                    </span>
+                  </div>
+
+                  {(!proc.executions || proc.executions.length === 0) && (
+                    <p style={{ fontSize: "13px", color: "#888", margin: "10px 0 0" }}>
+                      Saved, but no recorded runs yet.
+                    </p>
+                  )}
+
+                  {proc.executions && proc.executions.length > 0 && (
+                    <div style={{ marginTop: "12px" }}>
+                      {proc.executions.map((ex: any) => {
+                        const errs = normalizeErrors(ex.errors);
+                        const failed = (ex.productsFailed ?? 0) > 0;
+                        return (
+                          <div
+                            key={ex.id}
+                            style={{
+                              background: "#fafafa",
+                              borderRadius: "4px",
+                              padding: "10px 12px",
+                              marginBottom: "8px",
+                              fontSize: "13px",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                gap: "12px",
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <span style={{ color: "#444" }}>
+                                {formatWhen(ex.completedAt || ex.createdAt)}
+                              </span>
+                              <span
+                                style={{
+                                  color: failed ? "#c62828" : "#1b7f3b",
+                                  fontWeight: "bold",
+                                }}
+                              >
+                                {ex.productsUpdated ?? 0} updated
+                                {failed ? `, ${ex.productsFailed} failed` : ""} ·{" "}
+                                {ex.productsMatched ?? 0} matched
+                              </span>
+                            </div>
+                            {errs.length > 0 && (
+                              <details style={{ marginTop: "6px" }}>
+                                <summary style={{ cursor: "pointer", color: "#c62828" }}>
+                                  {errs.length} error{errs.length === 1 ? "" : "s"}
+                                </summary>
+                                <ul style={{ margin: "6px 0 0", paddingLeft: "18px" }}>
+                                  {errs.slice(0, 20).map((m, i) => (
+                                    <li key={i} style={{ color: "#a33" }}>
+                                      {m}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </details>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
