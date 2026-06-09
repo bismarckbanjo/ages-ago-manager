@@ -10,10 +10,10 @@ Build a procedure-driven bulk product editor for Shopify (agesagoapparel.com sto
 ## Strategy Chosen
 Convert from **Shopify CLI + React Router** to **Next.js on Vercel**. This eliminates the need for a local dev server and simplifies deployment to a single URL.
 
-**Auth (revised 2026-06-08):** Dropped OAuth / Partner-app flow entirely. Because this
-tool manages exactly ONE store (Ages Ago Apparel), it now authenticates with a
-**Custom App Admin API token** created in the store admin. No Partner Dashboard,
-no `client_id`/`secret`, no redirect URIs, no "Connect to Shopify" step.
+**Auth (revised 2026-06-08):** Kept OAuth, but fixed it. The store is on Shopify's
+Dev Dashboard model, which only supports OAuth apps (no paste-able static token).
+The app `854c8d52…` is real and active. OAuth was failing on fixable config bugs,
+now corrected. One-time install yields a permanent OFFLINE token stored in the DB.
 See "Auth Rework" below.
 
 ## What's Been Completed
@@ -63,39 +63,42 @@ See "Auth Rework" below.
 - Vercel auto-deploys on git push
 - Environment variables configured: SHOPIFY_API_KEY, SHOPIFY_API_SECRET, SHOPIFY_APP_URL, DATABASE_URL
 
-## Auth Rework (2026-06-08) — OAuth removed
+## Auth Rework (2026-06-08) — OAuth fixed (not removed)
 
-### Why the old OAuth flow could never work
-Diagnosed via the Partner Dashboard: the app `854c8d52…` referenced by the repo
-**does not exist** in the Partner organization the user can access (both Apps and
-Stores lists are empty). It was created under an older, now-inaccessible account.
-So every OAuth attempt authenticated against a ghost app — hence the persistent
-`redirect_uri is not whitelisted` error. The Partner org "Ages Ago Apparel" is a
-clean slate with zero apps/stores.
+### What was actually wrong
+The app `854c8d52…` IS real and active — it lives in the Dev Dashboard org tied to
+the store (`163864766`), reached via store admin → Apps → "Build apps in Dev
+Dashboard". (An earlier look at a *different*, empty Partner org caused confusion.)
+The store has migrated to Shopify's **Dev Dashboard model, which only supports OAuth
+apps** — there is no legacy "custom app" static Admin API token to paste. So OAuth is
+the correct approach; it was failing on fixable bugs:
+1. The active app version's **redirect URL was not whitelisted** for the Vercel callback.
+2. Code built the redirect from `SHOPIFY_APP_URL`, but `.env.local` defined `SHOPIFY_API_URL`.
+3. The "Connect" button used the custom domain `agesagoapparel.com` instead of the
+   required `.myshopify.com` domain.
 
-### Fix applied
-Replaced OAuth with a **Custom App Admin API token** (the Shopify-recommended
-pattern for a single internal store tool):
-- `lib/shopify.ts` — now a token-based Admin GraphQL client (`getAdminClient()`),
-  reads `SHOPIFY_SHOP` + `SHOPIFY_ADMIN_TOKEN` from env. OAuth helpers removed.
-- Deleted `app/api/auth/shopify` and `app/api/auth/callback` routes.
-- `app/page.tsx` — removed "Connect to Shopify"; redirects straight to `/dashboard`.
-- `app/api/products/preview`, `app/api/procedures/execute`, `app/api/procedures/history`
-  — dropped cookie-based auth; use the env token + `SHOP` constant.
-- Removed the stale duplicate `shopify.app.ages-ago-manager.toml` (pointed at
-  `example.com` / a different `client_id`).
+### Fix applied (code)
+- `lib/shopify.ts` — OAuth client backed by the stored **offline** token in the DB.
+  Accepts `SHOPIFY_APP_URL` OR `SHOPIFY_API_URL`; adds HMAC + OAuth-state validation;
+  `getAdminClient()` defaults to the configured `SHOP` (`1kfpgz-ex.myshopify.com`).
+- `app/api/auth/shopify` — starts OAuth with a CSRF state cookie, forces myshopify domain.
+- `app/api/auth/callback` — validates state + HMAC, stores offline token, sets shop cookie.
+- `app/page.tsx` — "Open dashboard" + one-time "Connect / reauthorize Shopify" link.
+- preview/execute/history routes use `getAdminClient()` / `SHOP` (no per-request cookie needed).
+- Removed stale duplicate `shopify.app.ages-ago-manager.toml`.
 - `tsc --noEmit` passes.
 
-### Store identity
-- Permanent domain (use for `SHOPIFY_SHOP`): `1kfpgz-ex.myshopify.com`
-- Primary/custom domain: `www.agesagoapparel.com`
+### Store / app identity
+- Permanent domain (`SHOPIFY_SHOP`): `1kfpgz-ex.myshopify.com`  | custom: `www.agesagoapparel.com`
+- App client id: `854c8d52c41c3b46fdec5892bd7be4c0` (app name `ages-ago-manager`, version `-4` active)
+- Dev Dashboard org: `163864766`
 
 ### Remaining to go live
-1. Create a Custom App in the store admin → copy its Admin API access token (`shpat_…`).
-2. Add `SHOPIFY_SHOP` and `SHOPIFY_ADMIN_TOKEN` to Vercel env vars.
-   (Old `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` / `SHOPIFY_APP_URL` are now unused.)
+1. Whitelist redirect URL `https://ages-ago-manager.vercel.app/api/auth/callback` on the app (Dev Dashboard).
+2. Confirm Vercel env: `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `SHOPIFY_APP_URL`, `DATABASE_URL`.
 3. Push to git → Vercel auto-deploys.
-4. Open the app, run a filter → preview → apply test.
+4. Visit the app → "Connect / reauthorize Shopify" once → install → token stored.
+5. Test filter → preview → apply. Then delete the two duplicate apps.
 
 ## Architecture
 
