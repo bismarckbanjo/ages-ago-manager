@@ -1,0 +1,13 @@
+{
+  "pages": {
+    "/_app": []
+  },
+  "devFiles": [],
+  "polyfillFiles": [],
+  "lowPriorityFiles": [
+    "static/hRioyChgp_OnUeipOYsmk/_buildManifest.js",
+    "static/hRioyChgp_OnUeipOYsmk/_ssgManifest.js",
+    "static/hRioyChgp_OnUeipOYsmk/_clientMiddlewareManifest.js"
+  ],
+  "rootMainFiles": []
+}

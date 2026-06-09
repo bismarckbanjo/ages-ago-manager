@@ -1,0 +1,11 @@
+{
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/api/auth/callback/route": "/api/auth/callback",
+  "/api/auth/shopify/route": "/api/auth/shopify",
+  "/api/procedures/execute/route": "/api/procedures/execute",
+  "/api/procedures/history/route": "/api/procedures/history",
+  "/api/products/preview/route": "/api/products/preview",
+  "/dashboard/page": "/dashboard",
+  "/page": "/"
+}

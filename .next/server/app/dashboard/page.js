@@ -1,7 +1,7 @@
 var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/dashboard/page.js")
 R.c("server/chunks/ssr/[root-of-the-server]__1ne156i._.js")
 R.c("server/chunks/ssr/09_z_next_dist_esm_build_templates_app-page_102wycd.js")
-R.c("server/chunks/ssr/[root-of-the-server]__1xi307o._.js")
+R.c("server/chunks/ssr/[root-of-the-server]__1vo9y64._.js")
 R.c("server/chunks/ssr/[root-of-the-server]__0vd_dnj._.js")
 R.c("server/chunks/ssr/ages-ago-manager_app_layout_tsx_09jzhl9._.js")
 R.c("server/chunks/ssr/09_z_next_dist_client_components_0oi3bs0._.js")
