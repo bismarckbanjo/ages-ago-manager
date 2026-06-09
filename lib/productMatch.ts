@@ -9,7 +9,7 @@ export interface NormalizedProduct {
   collections: string[]; // collection titles + handles
   price: string;
   compareAtPrice: string;
-  variantId: string | null;
+  variantId: string | null; // first variant (used for preview display only)
 }
 
 const PRODUCTS_PAGE_QUERY = `#graphql
@@ -27,6 +27,19 @@ const PRODUCTS_PAGE_QUERY = `#graphql
           collections(first: 50) { edges { node { title handle } } }
           variants(first: 1) { edges { node { id price compareAtPrice } } }
         }
+      }
+    }
+  }`;
+
+// Fetch every variant id for a single product (paginated). Used at apply time
+// for price / compare-at changes, which must touch ALL variants of a product
+// (sizes, colors), not just the first one shown in the preview.
+const PRODUCT_VARIANT_IDS_QUERY = `#graphql
+  query ProductVariantIds($id: ID!, $cursor: String) {
+    product(id: $id) {
+      variants(first: 100, after: $cursor) {
+        pageInfo { hasNextPage endCursor }
+        edges { node { id } }
       }
     }
   }`;
@@ -49,13 +62,22 @@ export function normalizeProduct(node: any): NormalizedProduct {
   };
 }
 
-/** Fetch the full catalog (paginated) and normalize each product. */
+/**
+ * Fetch the full catalog (paginated) and normalize each product.
+ * Returns `truncated: true` if the catalog is larger than `max` and the scan
+ * was cut short, so callers can warn the user instead of silently missing rows.
+ */
 export async function fetchAllProducts(
   admin = getAdminClient(),
-  max = 2000
-): Promise<{ currencyCode: string; products: NormalizedProduct[] }> {
+  max = 10000
+): Promise<{
+  currencyCode: string;
+  products: NormalizedProduct[];
+  truncated: boolean;
+}> {
   let cursor: string | null = null;
   let currencyCode = "USD";
+  let hasNextPage = false;
   const products: NormalizedProduct[] = [];
 
   do {
@@ -68,10 +90,36 @@ export async function fetchAllProducts(
     for (const edge of conn?.edges ?? []) {
       products.push(normalizeProduct(edge.node));
     }
-    cursor = conn?.pageInfo?.hasNextPage ? conn.pageInfo.endCursor : null;
+    hasNextPage = Boolean(conn?.pageInfo?.hasNextPage);
+    cursor = hasNextPage ? conn.pageInfo.endCursor : null;
   } while (cursor && products.length < max);
 
-  return { currencyCode, products };
+  // If we stopped because of the cap while Shopify still had more pages.
+  const truncated = hasNextPage && products.length >= max;
+
+  return { currencyCode, products, truncated };
+}
+
+/** Fetch every variant id for one product (paginated). */
+export async function fetchProductVariantIds(
+  admin: ReturnType<typeof getAdminClient>,
+  productId: string
+): Promise<string[]> {
+  const ids: string[] = [];
+  let cursor: string | null = null;
+
+  do {
+    const res: any = await admin.graphql(PRODUCT_VARIANT_IDS_QUERY, {
+      variables: { id: productId, cursor },
+    });
+    const conn = res?.data?.product?.variants;
+    for (const edge of conn?.edges ?? []) {
+      if (edge?.node?.id) ids.push(edge.node.id);
+    }
+    cursor = conn?.pageInfo?.hasNextPage ? conn.pageInfo.endCursor : null;
+  } while (cursor);
+
+  return ids;
 }
 
 /** Map a UI field name to the candidate string values on a product. */
@@ -161,4 +209,13 @@ export function matchesConditions(
         return true;
     }
   });
+}
+
+/** True if at least one condition is fully specified (field+operator+value). */
+export function hasValidCondition(conditions: any[]): boolean {
+  if (!Array.isArray(conditions)) return false;
+  return conditions.some(
+    (c) =>
+      c && c.field && c.operator && c.value !== "" && c.value != null
+  );
 }

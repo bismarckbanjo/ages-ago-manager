@@ -7,13 +7,15 @@ export async function POST(request: NextRequest) {
     const { conditions } = await request.json();
 
     const admin = getAdminClient();
-    const { currencyCode, products } = await fetchAllProducts(admin);
+    const { currencyCode, products, truncated } = await fetchAllProducts(admin);
 
     const matched = products.filter((p) => matchesConditions(p, conditions));
 
     return NextResponse.json({
       currencyCode,
       scanned: products.length,
+      // True if the catalog is larger than the scan cap; matches may be incomplete.
+      truncated,
       matched: matched.length,
       products: matched.map((p) => ({
         id: p.id,

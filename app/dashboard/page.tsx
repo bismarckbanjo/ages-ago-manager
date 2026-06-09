@@ -24,6 +24,13 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Editing the filters invalidates a previous preview, so clear it. This stops
+  // an Apply from running against a stale match set (e.g. a now-empty filter).
+  const handleConditionsChange = (next: Condition[]) => {
+    setConditions(next);
+    if (preview) setPreview(null);
+  };
+
   const handlePreview = async () => {
     if (!conditions[0].field || !conditions[0].value) {
       setError("Please fill in at least one filter condition");
@@ -55,10 +62,21 @@ export default function Dashboard() {
     }
 
     const valueFields = ["title", "vendor", "tags", "price", "compareAtPrice"];
-    if (valueFields.every((k) => !changes[k])) {
+    const hasChange =
+      valueFields.some((k) => changes[k]) ||
+      changes.compareAtPriceClear === "true";
+    if (!hasChange) {
       setError("Please select at least one change to apply");
       return;
     }
+
+    // Confirm the destructive bulk write, showing how many products are affected.
+    const count = preview?.matched ?? 0;
+    const ok = window.confirm(
+      `Apply these changes to ${count} product${count === 1 ? "" : "s"}?\n\n` +
+        `This updates the live Shopify store and cannot be undone.`
+    );
+    if (!ok) return;
 
     setError("");
     setLoading(true);
@@ -80,6 +98,10 @@ export default function Dashboard() {
           if (result.errors && result.errors.length > 0) {
             message += `:\n\n${result.errors.join("\n")}`;
           }
+        }
+        if (result.truncated) {
+          message +=
+            "\n\nNote: the catalog is larger than the scan limit, so some products may not have been considered.";
         }
         alert(message);
         if (!result.failed) {
@@ -146,7 +168,7 @@ export default function Dashboard() {
 
         <div style={{ marginBottom: "30px" }}>
           <h3 style={{ marginBottom: "16px" }}>Filters (Find Products)</h3>
-          <SimpleQueryBuilder conditions={conditions} onChange={setConditions} />
+          <SimpleQueryBuilder conditions={conditions} onChange={handleConditionsChange} />
         </div>
 
         <div style={{ marginBottom: "30px" }}>
@@ -218,6 +240,12 @@ export default function Dashboard() {
               <p>
                 <strong>Matched Products:</strong> {preview.matched}
               </p>
+              {preview.truncated && (
+                <p style={{ color: "#b26a00", fontSize: "13px", margin: "8px 0 0" }}>
+                  ⚠ The catalog is larger than the scan limit, so some products
+                  may not be included in these matches.
+                </p>
+              )}
               {preview.products && preview.products.length > 0 && (
                 <div style={{ marginTop: "12px", maxHeight: "300px", overflowY: "auto" }}>
                   {preview.products.slice(0, 10).map((product: any, i: number) => (

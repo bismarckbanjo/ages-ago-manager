@@ -25,6 +25,17 @@ export function SimpleChangesBuilder({ changes, onChange }: SimpleChangesBuilder
     onChange({ ...changes, [key]: value });
   };
 
+  const clearCompareAt = changes.compareAtPriceClear === "true";
+
+  const toggleClearCompareAt = (checked: boolean) => {
+    // When clearing, also wipe any typed compare-at value so the two can't conflict.
+    onChange({
+      ...changes,
+      compareAtPriceClear: checked ? "true" : "",
+      compareAtPrice: checked ? "" : changes.compareAtPrice || "",
+    });
+  };
+
   const modeSelect = (
     key: string,
     modes: { value: string; label: string }[]
@@ -49,12 +60,17 @@ export function SimpleChangesBuilder({ changes, onChange }: SimpleChangesBuilder
     </select>
   );
 
-  const textInput = (key: string, placeholder = "Leave blank to skip") => (
+  const textInput = (
+    key: string,
+    placeholder = "Leave blank to skip",
+    disabled = false
+  ) => (
     <input
       type="text"
       value={changes[key] || ""}
       onChange={(e) => handleChange(key, e.target.value)}
       placeholder={placeholder}
+      disabled={disabled}
       style={{
         width: "100%",
         padding: "10px",
@@ -62,6 +78,8 @@ export function SimpleChangesBuilder({ changes, onChange }: SimpleChangesBuilder
         borderRadius: "4px",
         fontSize: "14px",
         boxSizing: "border-box",
+        background: disabled ? "#f0f0f0" : "white",
+        color: disabled ? "#999" : "inherit",
       }}
     />
   );
@@ -97,12 +115,34 @@ export function SimpleChangesBuilder({ changes, onChange }: SimpleChangesBuilder
       <div style={{ marginBottom: "12px" }}>
         <label style={labelStyle}>Price</label>
         {textInput("price")}
+        <p style={hintStyle}>Applies to every variant of each matched product.</p>
       </div>
 
       {/* Compare At Price */}
       <div style={{ marginBottom: "12px" }}>
         <label style={labelStyle}>Compare At Price</label>
-        {textInput("compareAtPrice")}
+        {textInput(
+          "compareAtPrice",
+          clearCompareAt ? "Will be cleared" : "Leave blank to skip",
+          clearCompareAt
+        )}
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            marginTop: "6px",
+            fontSize: "13px",
+            color: "#555",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={clearCompareAt}
+            onChange={(e) => toggleClearCompareAt(e.target.checked)}
+          />
+          Clear compare-at price (end sale) on all variants
+        </label>
       </div>
 
       {/* Vendor: replace only */}
