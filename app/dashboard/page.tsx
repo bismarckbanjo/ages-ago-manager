@@ -10,6 +10,10 @@ interface Condition {
   value: string;
 }
 
+// Shopify admin home for this store. The app has no built-in way back to
+// admin otherwise, so expose an explicit link in the header.
+const ADMIN_URL = "https://admin.shopify.com/store/1kfpgz-ex";
+
 export default function Dashboard() {
   const [procedureName, setProcedureName] = useState("");
   const [conditions, setConditions] = useState<Condition[]>([
@@ -69,11 +73,20 @@ export default function Dashboard() {
       });
       const result = await response.json();
       if (result.success) {
-        alert(`Updated ${result.updated} products`);
-        setProcedureName("");
-        setConditions([{ field: "", operator: "equals", value: "" }]);
-        setChanges({});
-        setPreview(null);
+        let message = `Updated ${result.updated} products`;
+        if (result.failed) {
+          message += `, ${result.failed} failed`;
+          if (result.errors && result.errors.length > 0) {
+            message += `:\n\n${result.errors.join("\n")}`;
+          }
+        }
+        alert(message);
+        if (!result.failed) {
+          setProcedureName("");
+          setConditions([{ field: "", operator: "equals", value: "" }]);
+          setChanges({});
+          setPreview(null);
+        }
       } else {
         setError(result.error || "Failed to apply changes");
       }
@@ -87,7 +100,27 @@ export default function Dashboard() {
 
   return (
     <div style={{ maxWidth: "900px", margin: "0 auto", padding: "40px 20px" }}>
-      <h1>Bulk Product Editor</h1>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "16px",
+        }}
+      >
+        <h1 style={{ margin: 0 }}>Bulk Product Editor</h1>
+        <a
+          href={ADMIN_URL}
+          style={{
+            fontSize: "14px",
+            color: "#0070f3",
+            textDecoration: "none",
+            whiteSpace: "nowrap",
+          }}
+        >
+          ← Back to Shopify Admin
+        </a>
+      </div>
 
       <div style={{ marginTop: "40px" }}>
         <div style={{ marginBottom: "30px" }}>

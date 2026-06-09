@@ -11,13 +11,47 @@ const VARIANT_UPDATE = `#graphql
     }
   }`;
 
+// NOTE: on API version 2024-10+ (this app defaults to 2025-01) the productUpdate
+// mutation's `product` argument expects ProductUpdateInput, NOT ProductInput.
+// Declaring the wrong type makes the whole mutation fail at the GraphQL
+// validation layer, which returns top-level `errors` and a null data field --
+// so it must be caught by collectErrors() below, not just via userErrors.
 const PRODUCT_UPDATE = `#graphql
-  mutation UpdateProduct($product: ProductInput!) {
+  mutation UpdateProduct($product: ProductUpdateInput!) {
     productUpdate(product: $product) {
       product { id }
       userErrors { field message }
     }
   }`;
+
+// Gather both top-level GraphQL errors (validation/auth/etc.) and the mutation's
+// own userErrors. A mutation field that comes back null with no explicit error
+// is also treated as a failure so nothing fails silently.
+function collectErrors(result: any, mutationField: string): string[] {
+  const messages: string[] = [];
+
+  if (Array.isArray(result?.errors)) {
+    for (const e of result.errors) messages.push(e?.message ?? String(e));
+  }
+
+  const userErrors = result?.data?.[mutationField]?.userErrors;
+  if (Array.isArray(userErrors)) {
+    for (const e of userErrors) {
+      const field = Array.isArray(e?.field) ? e.field.join(".") : e?.field;
+      messages.push(field ? `${field}: ${e?.message}` : `${e?.message}`);
+    }
+  }
+
+  if (
+    messages.length === 0 &&
+    result?.data &&
+    result.data[mutationField] == null
+  ) {
+    messages.push(`${mutationField} returned no data`);
+  }
+
+  return messages;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,6 +76,7 @@ export async function POST(request: NextRequest) {
 
     let updated = 0;
     let failed = 0;
+    const errors: string[] = [];
 
     for (const product of matchingProducts) {
       try {
@@ -50,21 +85,31 @@ export async function POST(request: NextRequest) {
         if (changes.title) updates.title = changes.title;
         if (changes.vendor) updates.vendor = changes.vendor;
         if (changes.tags)
-          updates.tags = changes.tags.split(",").map((t: string) => t.trim());
+          updates.tags = changes.tags
+            .split(",")
+            .map((t: string) => t.trim())
+            .filter(Boolean);
 
-        // Update product-level fields if any were provided.
+        let productFailed = false;
+
+        // Update product-level fields (title / vendor / tags) if any were provided.
         if (Object.keys(updates).length > 1) {
           const result = await admin.graphql(PRODUCT_UPDATE, {
             variables: { product: updates },
           });
-          if (result?.data?.productUpdate?.userErrors?.length > 0) {
-            failed++;
-            continue;
+          const errs = collectErrors(result, "productUpdate");
+          if (errs.length > 0) {
+            errors.push(`${product.id} (product): ${errs.join("; ")}`);
+            productFailed = true;
           }
         }
 
         // Update variant price / compareAtPrice if requested.
-        if ((changes.price || changes.compareAtPrice) && product.variantId) {
+        if (
+          !productFailed &&
+          (changes.price || changes.compareAtPrice) &&
+          product.variantId
+        ) {
           const variantUpdates: any = { id: product.variantId };
           if (changes.price) variantUpdates.price = changes.price;
           if (changes.compareAtPrice)
@@ -76,15 +121,26 @@ export async function POST(request: NextRequest) {
               variants: [variantUpdates],
             },
           });
-          if (result?.data?.productVariantsBulkUpdate?.userErrors?.length > 0) {
-            failed++;
-            continue;
+          const errs = collectErrors(result, "productVariantsBulkUpdate");
+          if (errs.length > 0) {
+            errors.push(`${product.id} (variant): ${errs.join("; ")}`);
+            productFailed = true;
           }
+        }
+
+        if (productFailed) {
+          failed++;
+          continue;
         }
 
         updated++;
       } catch (error) {
         console.error(`Failed to update product ${product.id}:`, error);
+        errors.push(
+          `${product.id}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
         failed++;
       }
     }
@@ -110,6 +166,8 @@ export async function POST(request: NextRequest) {
       updated,
       failed,
       total: matchingProducts.length,
+      // Surface up to 20 failure reasons so partial/silent failures are visible.
+      errors: errors.slice(0, 20),
     });
   } catch (error) {
     console.error("Execute error:", error);
