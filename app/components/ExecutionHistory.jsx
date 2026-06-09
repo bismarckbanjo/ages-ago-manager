@@ -13,10 +13,10 @@ export function ExecutionHistory({ procedureId }) {
   const fetchExecutions = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/procedures?id=${procedureId}`);
+      const res = await fetch(`/api/procedures/history`);
       if (res.ok) {
         const data = await res.json();
-        setExecutions(data);
+        setExecutions(data.procedures || []);
       }
     } catch (err) {
       console.error("Failed to fetch executions:", err);

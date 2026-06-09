@@ -6,7 +6,7 @@ application_url = "https://ages-ago-manager.vercel.app"
 embedded = true
 
 [build]
-automatically_update_urls_on_dev = false
+automatically_update_urls_on_dev = true
 
 [webhooks]
 api_version = "2026-07"
@@ -16,4 +16,4 @@ api_version = "2026-07"
 scopes = "read_products,write_products"
 
 [auth]
-redirect_urls = [ "https://ages-ago-manager.vercel.app/auth/callback" ]
+redirect_urls = [ "https://ages-ago-manager.vercel.app/api/auth/callback", "http://localhost:3000/api/auth/callback" ]
