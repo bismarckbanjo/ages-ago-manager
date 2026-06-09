@@ -54,7 +54,8 @@ export default function Dashboard() {
       return;
     }
 
-    if (Object.keys(changes).every((k) => !changes[k])) {
+    const valueFields = ["title", "vendor", "tags", "price", "compareAtPrice"];
+    if (valueFields.every((k) => !changes[k])) {
       setError("Please select at least one change to apply");
       return;
     }

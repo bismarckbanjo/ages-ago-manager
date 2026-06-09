@@ -59,7 +59,8 @@ export async function POST(request: NextRequest) {
 
     const { name, conditions, changes } = await request.json();
 
-    if (!name || !changes || Object.keys(changes).every((k) => !changes[k])) {
+    const VALUE_FIELDS = ["title", "vendor", "tags", "price", "compareAtPrice"];
+    if (!name || !changes || VALUE_FIELDS.every((k) => !changes[k])) {
       return NextResponse.json(
         { error: "Missing procedure name or changes" },
         { status: 400 }
@@ -82,13 +83,34 @@ export async function POST(request: NextRequest) {
       try {
         const updates: any = { id: product.id };
 
-        if (changes.title) updates.title = changes.title;
+        // Title supports set (replace) / append / prepend.
+        if (changes.title) {
+          const mode = changes.titleMode || "set";
+          const current = product.title || "";
+          if (mode === "append") updates.title = current + changes.title;
+          else if (mode === "prepend") updates.title = changes.title + current;
+          else updates.title = changes.title;
+        }
+
+        // Vendor is replace-only.
         if (changes.vendor) updates.vendor = changes.vendor;
-        if (changes.tags)
-          updates.tags = changes.tags
+
+        // Tags support set (replace) / add / remove.
+        if (changes.tags) {
+          const incoming = changes.tags
             .split(",")
             .map((t: string) => t.trim())
             .filter(Boolean);
+          const mode = changes.tagsMode || "set";
+          const current = Array.isArray(product.tags) ? product.tags : [];
+          if (mode === "add") {
+            updates.tags = Array.from(new Set([...current, ...incoming]));
+          } else if (mode === "remove") {
+            updates.tags = current.filter((t: string) => !incoming.includes(t));
+          } else {
+            updates.tags = incoming;
+          }
+        }
 
         let productFailed = false;
 
