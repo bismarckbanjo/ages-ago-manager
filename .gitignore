@@ -31,3 +31,7 @@ database.sqlite
 .vercel
 .env*.local
 .env*
+
+# build / local artifacts
+tsconfig.tsbuildinfo
+.claude/settings.local.json

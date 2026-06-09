@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { getAdminClient } from "@/lib/shopify";
+import { getAdminClient, SHOP } from "@/lib/shopify";
 import { prisma } from "@/lib/db";
 
 const VARIANT_UPDATE = `#graphql
@@ -53,12 +52,7 @@ function matchesConditions(product: any, conditions: any[]) {
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const shop = cookieStore.get("shop")?.value;
-
-    if (!shop) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
+    const shop = SHOP;
 
     const { name, conditions, changes } = await request.json();
 
@@ -69,7 +63,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const admin = await getAdminClient(shop);
+    const admin = getAdminClient();
 
     // Fetch products
     const productsQuery = `#graphql

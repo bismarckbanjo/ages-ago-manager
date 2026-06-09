@@ -10,6 +10,12 @@ Build a procedure-driven bulk product editor for Shopify (agesagoapparel.com sto
 ## Strategy Chosen
 Convert from **Shopify CLI + React Router** to **Next.js on Vercel**. This eliminates the need for a local dev server and simplifies deployment to a single URL.
 
+**Auth (revised 2026-06-08):** Dropped OAuth / Partner-app flow entirely. Because this
+tool manages exactly ONE store (Ages Ago Apparel), it now authenticates with a
+**Custom App Admin API token** created in the store admin. No Partner Dashboard,
+no `client_id`/`secret`, no redirect URIs, no "Connect to Shopify" step.
+See "Auth Rework" below.
+
 ## What's Been Completed
 
 ### 1. Database Setup ✅
@@ -57,31 +63,39 @@ Convert from **Shopify CLI + React Router** to **Next.js on Vercel**. This elimi
 - Vercel auto-deploys on git push
 - Environment variables configured: SHOPIFY_API_KEY, SHOPIFY_API_SECRET, SHOPIFY_APP_URL, DATABASE_URL
 
-## Current Problem
+## Auth Rework (2026-06-08) — OAuth removed
 
-### OAuth Flow Failing ❌
+### Why the old OAuth flow could never work
+Diagnosed via the Partner Dashboard: the app `854c8d52…` referenced by the repo
+**does not exist** in the Partner organization the user can access (both Apps and
+Stores lists are empty). It was created under an older, now-inaccessible account.
+So every OAuth attempt authenticated against a ghost app — hence the persistent
+`redirect_uri is not whitelisted` error. The Partner org "Ages Ago Apparel" is a
+clean slate with zero apps/stores.
 
-**Symptom:** After user clicks "Connect to Shopify," they see:
-```
-Oops, something went wrong.
-Oauth error invalid_request: The redirect_uri is not whitelisted
-```
+### Fix applied
+Replaced OAuth with a **Custom App Admin API token** (the Shopify-recommended
+pattern for a single internal store tool):
+- `lib/shopify.ts` — now a token-based Admin GraphQL client (`getAdminClient()`),
+  reads `SHOPIFY_SHOP` + `SHOPIFY_ADMIN_TOKEN` from env. OAuth helpers removed.
+- Deleted `app/api/auth/shopify` and `app/api/auth/callback` routes.
+- `app/page.tsx` — removed "Connect to Shopify"; redirects straight to `/dashboard`.
+- `app/api/products/preview`, `app/api/procedures/execute`, `app/api/procedures/history`
+  — dropped cookie-based auth; use the env token + `SHOP` constant.
+- Removed the stale duplicate `shopify.app.ages-ago-manager.toml` (pointed at
+  `example.com` / a different `client_id`).
+- `tsc --noEmit` passes.
 
-**Root Cause (suspected):**
-The app is configured as **embedded: false** in `shopify.app.toml`, but the Shopify app in the Partner dashboard was originally set up as an embedded app. When OAuth redirects to Shopify's login, the security headers (X-Frame-Options: deny, frame-ancestors CSP) block the embedded flow.
+### Store identity
+- Permanent domain (use for `SHOPIFY_SHOP`): `1kfpgz-ex.myshopify.com`
+- Primary/custom domain: `www.agesagoapparel.com`
 
-**What's Been Tried:**
-1. ✅ Added redirect URIs to shopify.app.toml: `https://ages-ago-manager.vercel.app/api/auth/callback`, `http://localhost:3000/api/auth/callback`
-2. ✅ Ran `shopify app config link` to sync URLs
-3. ✅ Changed `embedded = true` → `embedded = false`
-4. ✅ Ran `shopify app config link` again
-5. ❌ Still getting "redirect_uri is not whitelisted"
-
-**Why It's Stuck:**
-- The Shopify Partner dashboard UI wasn't accessible (user permissions issue)
-- Cannot manually verify/update redirect URLs in the Partner dashboard
-- The Shopify CLI `config link` command seems to not be fully syncing the changes
-- User has created multiple "ages ago" test apps and unclear which one is the "correct" one
+### Remaining to go live
+1. Create a Custom App in the store admin → copy its Admin API access token (`shpat_…`).
+2. Add `SHOPIFY_SHOP` and `SHOPIFY_ADMIN_TOKEN` to Vercel env vars.
+   (Old `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` / `SHOPIFY_APP_URL` are now unused.)
+3. Push to git → Vercel auto-deploys.
+4. Open the app, run a filter → preview → apply test.
 
 ## Architecture
 

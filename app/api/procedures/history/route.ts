@@ -1,18 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { SHOP } from "@/lib/shopify";
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const cookieStore = await cookies();
-    const shop = cookieStore.get("shop")?.value;
-
-    if (!shop) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
     const procedures = await prisma.procedure.findMany({
-      where: { shop },
+      where: { shop: SHOP },
       orderBy: { updatedAt: "desc" },
       include: {
         executions: {

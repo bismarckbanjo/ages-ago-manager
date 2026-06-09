@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { getAdminClient } from "@/lib/shopify";
 
 const PRODUCTS_QUERY = `#graphql
@@ -56,16 +55,9 @@ function matchesConditions(product: any, conditions: any[]) {
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const shop = cookieStore.get("shop")?.value;
-
-    if (!shop) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
     const { conditions } = await request.json();
 
-    const admin = await getAdminClient(shop);
+    const admin = getAdminClient();
     const { data } = await admin.graphql(PRODUCTS_QUERY);
 
     let products = (data?.products?.edges ?? []).map(({ node }: any) => {
