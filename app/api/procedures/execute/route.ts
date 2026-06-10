@@ -3,10 +3,11 @@ import { getAdminClient, SHOP } from "@/lib/shopify";
 import { prisma } from "@/lib/db";
 import {
   fetchAllProducts,
-  fetchProductVariantIds,
+  fetchProductVariants,
   matchesConditions,
   hasValidCondition,
 } from "@/lib/productMatch";
+import { GOOGLE_FIELDS, GOOGLE_NAMESPACE } from "@/lib/googleFields";
 
 const VARIANT_UPDATE = `#graphql
   mutation UpdateVariantPrice($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
@@ -28,6 +29,18 @@ const PRODUCT_UPDATE = `#graphql
       userErrors { field message }
     }
   }`;
+
+// Set Google (mm-google-shopping) metafields on products and/or variants.
+// metafieldsSet accepts up to 25 metafields per call, so callers chunk inputs.
+const METAFIELDS_SET = `#graphql
+  mutation SetMetafields($metafields: [MetafieldsSetInput!]!) {
+    metafieldsSet(metafields: $metafields) {
+      metafields { id }
+      userErrors { field message }
+    }
+  }`;
+
+const METAFIELDS_PER_CALL = 25;
 
 // Shopify's GraphQL Admin API is cost-throttled. When a request is throttled it
 // comes back with a top-level error (code THROTTLED) and an extensions.cost
@@ -112,12 +125,31 @@ export async function POST(request: NextRequest) {
 
     // A "clear compare-at price" request is itself a change even though its
     // value is empty, so count it alongside the regular value fields.
-    const VALUE_FIELDS = ["title", "vendor", "tags", "price", "compareAtPrice"];
+    const VALUE_FIELDS = [
+      "title",
+      "vendor",
+      "tags",
+      "price",
+      "pricePercent",
+      "compareAtPrice",
+      "status",
+      "seoTitle",
+      "seoDescription",
+    ];
     const hasClearCompareAt = changes?.compareAtPriceClear === "true";
+
+    // Google (mm-google-shopping) metafield changes that were actually provided.
+    const googleProvided = GOOGLE_FIELDS.map((g) => ({
+      g,
+      value: changes?.[g.changeKey],
+    })).filter((x) => x.value != null && x.value !== "");
+
     if (
       !name ||
       !changes ||
-      (VALUE_FIELDS.every((k) => !changes[k]) && !hasClearCompareAt)
+      (VALUE_FIELDS.every((k) => !changes[k]) &&
+        !hasClearCompareAt &&
+        googleProvided.length === 0)
     ) {
       return NextResponse.json(
         { error: "Missing procedure name or changes" },
@@ -148,7 +180,20 @@ export async function POST(request: NextRequest) {
 
     // Decide once whether a variant-level (price/compare-at) change is needed.
     const wantsVariantChange =
-      Boolean(changes.price) || Boolean(changes.compareAtPrice) || hasClearCompareAt;
+      Boolean(changes.price) ||
+      Boolean(changes.pricePercent) ||
+      Boolean(changes.compareAtPrice) ||
+      hasClearCompareAt;
+
+    // A percentage price change derives each variant's new price from its
+    // current price. Exact `price` takes precedence if both are somehow set.
+    const pricePercent =
+      !changes.price && changes.pricePercent
+        ? parseFloat(changes.pricePercent)
+        : NaN;
+
+    const wantsGoogleVariant = googleProvided.some((x) => x.g.level === "variant");
+    const wantsGoogleProduct = googleProvided.some((x) => x.g.level === "product");
 
     let updated = 0;
     let failed = 0;
@@ -170,6 +215,19 @@ export async function POST(request: NextRequest) {
         // Vendor is replace-only.
         if (changes.vendor) updates.vendor = changes.vendor;
 
+        // Product status: active / draft / archived (Shopify expects uppercase).
+        if (changes.status) {
+          updates.status = String(changes.status).toUpperCase();
+        }
+
+        // SEO (search engine listing) title / description. Only include the
+        // sub-fields that were provided so a blank one doesn't wipe the other.
+        if (changes.seoTitle || changes.seoDescription) {
+          updates.seo = {};
+          if (changes.seoTitle) updates.seo.title = changes.seoTitle;
+          if (changes.seoDescription) updates.seo.description = changes.seoDescription;
+        }
+
         // Tags support set (replace) / add / remove.
         if (changes.tags) {
           const incoming = changes.tags
@@ -188,6 +246,9 @@ export async function POST(request: NextRequest) {
         }
 
         let productFailed = false;
+        // Google metafield writes are collected here, then flushed in chunks of
+        // 25 via metafieldsSet after the product/variant updates succeed.
+        const metafieldInputs: any[] = [];
 
         // Update product-level fields (title / vendor / tags) if any were provided.
         if (Object.keys(updates).length > 1) {
@@ -204,29 +265,90 @@ export async function POST(request: NextRequest) {
         // Update variant price / compareAtPrice across ALL variants of the
         // product (sizes/colors), not just the first one. compareAtPriceClear
         // wipes the compare-at price (to end a sale).
-        if (!productFailed && wantsVariantChange) {
-          const variantIds = await fetchProductVariantIds(admin, product.id);
-          if (variantIds.length === 0) {
+        if (!productFailed && (wantsVariantChange || wantsGoogleVariant)) {
+          const variantRows = await fetchProductVariants(admin, product.id);
+          if (variantRows.length === 0) {
             errors.push(`${product.id} (variant): no variants found`);
             productFailed = true;
           } else {
-            const variants = variantIds.map((id) => {
-              const v: any = { id };
-              if (changes.price) v.price = changes.price;
-              if (hasClearCompareAt) v.compareAtPrice = null;
-              else if (changes.compareAtPrice)
-                v.compareAtPrice = changes.compareAtPrice;
-              return v;
-            });
+            // Price / compare-at across all variants.
+            if (wantsVariantChange) {
+              const variants = variantRows.map(({ id, price }) => {
+                const v: any = { id };
+                if (changes.price) {
+                  // Exact price for every variant.
+                  v.price = changes.price;
+                } else if (!Number.isNaN(pricePercent)) {
+                  // Percentage change off this variant's current price.
+                  const base = parseFloat(price);
+                  if (!Number.isNaN(base)) {
+                    v.price = (base * (1 + pricePercent / 100)).toFixed(2);
+                  }
+                }
+                if (hasClearCompareAt) v.compareAtPrice = null;
+                else if (changes.compareAtPrice)
+                  v.compareAtPrice = changes.compareAtPrice;
+                return v;
+              });
 
-            const result = await graphqlWithRetry(admin, VARIANT_UPDATE, {
-              productId: product.id,
-              variants,
+              const result = await graphqlWithRetry(admin, VARIANT_UPDATE, {
+                productId: product.id,
+                variants,
+              });
+              const errs = collectErrors(result, "productVariantsBulkUpdate");
+              if (errs.length > 0) {
+                errors.push(`${product.id} (variant): ${errs.join("; ")}`);
+                productFailed = true;
+              }
+            }
+
+            // Google variant-level metafields apply to EVERY variant.
+            if (!productFailed && wantsGoogleVariant) {
+              for (const row of variantRows) {
+                for (const { g, value } of googleProvided) {
+                  if (g.level === "variant") {
+                    metafieldInputs.push({
+                      ownerId: row.id,
+                      namespace: GOOGLE_NAMESPACE,
+                      key: g.metafieldKey,
+                      type: g.metafieldType,
+                      value: String(value),
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // Google product-level metafields (e.g. custom_product). No variant
+        // fetch required.
+        if (!productFailed && wantsGoogleProduct) {
+          for (const { g, value } of googleProvided) {
+            if (g.level === "product") {
+              metafieldInputs.push({
+                ownerId: product.id,
+                namespace: GOOGLE_NAMESPACE,
+                key: g.metafieldKey,
+                type: g.metafieldType,
+                value: String(value),
+              });
+            }
+          }
+        }
+
+        // Flush collected Google metafields in chunks (metafieldsSet caps at 25).
+        if (!productFailed && metafieldInputs.length > 0) {
+          for (let i = 0; i < metafieldInputs.length; i += METAFIELDS_PER_CALL) {
+            const chunk = metafieldInputs.slice(i, i + METAFIELDS_PER_CALL);
+            const result = await graphqlWithRetry(admin, METAFIELDS_SET, {
+              metafields: chunk,
             });
-            const errs = collectErrors(result, "productVariantsBulkUpdate");
+            const errs = collectErrors(result, "metafieldsSet");
             if (errs.length > 0) {
-              errors.push(`${product.id} (variant): ${errs.join("; ")}`);
+              errors.push(`${product.id} (google): ${errs.join("; ")}`);
               productFailed = true;
+              break;
             }
           }
         }

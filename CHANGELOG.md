@@ -5,6 +5,46 @@
 > Next.js; the apply path is `app/api/procedures/execute/route.ts`. See
 > `LLM_START_HERE.md`.
 
+## 2026-06-09 (New filters & change actions — Next.js app)
+
+- **New filters:** **Status** (active/draft/archived, fixed pick-list) and
+  **Compare-at price** (numeric). `lib/productMatch.ts` now reads `status` in the
+  catalog scan, adds it to `NormalizedProduct`, and handles both fields in
+  `fieldValues()`. `SimpleQueryBuilder.tsx` renders a status `<select>` and a
+  numeric compare-at input.
+- **New change actions:**
+  - **Product status** — set active/draft/archived via `productUpdate` (status
+    uppercased to the `ProductStatus` enum).
+  - **Percentage price change** — `pricePercent` adjusts each variant's *current*
+    price by a percent (negative lowers it), rounded to 2 dp, multi-variant
+    aware. Mutually exclusive with the exact Price field (exact wins). Added
+    `fetchProductVariants()` (returns `{id, price}`) so the new price can be
+    derived per variant.
+  - **SEO title / description** — `seoTitle` / `seoDescription` via
+    `productUpdate(seo:)`; only the provided sub-field is sent so a blank one
+    doesn't wipe the other.
+- **Google / Merchant Center metafields (`mm-google-shopping`)** — both filters
+  and change actions:
+  - New `lib/googleFields.ts` is the single source of truth for every Google
+    field (change key, filter label, metafield key, owner level, type, fixed
+    options). Variant-level: `age_group`, `gender`, `condition`, `mpn`,
+    `size_system`, `size_type`, `custom_label_0–4`. Product-level:
+    `custom_product` (boolean).
+  - **Filter:** the catalog scan now pulls the `mm-google-shopping` metafields
+    (first variant + product `custom_product`) and `NormalizedProduct.google`
+    exposes them; the filter dropdown has a grouped "Google / Merchant Center"
+    section (`matchesConditions` resolves these via `googleFieldByFilter`).
+  - **Change:** the execute route writes the fields via `metafieldsSet`
+    (chunked to 25). Variant-level fields are applied to **every** variant of a
+    matched product; `custom_product` is set on the product. Google-only
+    procedures pass the change guards.
+- Guards updated in both `execute/route.ts` (`VALUE_FIELDS` + `googleProvided`)
+  and `dashboard/page.tsx` (`valueFields` + `GOOGLE_FIELDS`) so the new fields
+  count as a real change.
+- Verified: all modified GraphQL validated against the live schema
+  (`BulkEditProducts` with metafields, `ProductVariants`, `productUpdate`,
+  `metafieldsSet`). `tsc`/Vercel build to be confirmed on push.
+
 ## 2026-06-09 (Bulk-editor hardening — Next.js app)
 
 Following a code audit (`CODE_AUDIT_2026-06-09.md`):

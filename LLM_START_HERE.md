@@ -50,7 +50,8 @@ Start with these. **The live "apply" logic is the route file, not the services.*
 | `app/api/filter-values/route.ts` | Populates the filter dropdowns with real values pulled from Shopify. |
 | `app/api/procedures/history/route.ts` | Saved procedures + their recent executions (JSON; rendered by the Run History panel on the dashboard). |
 | `lib/shopify.ts` | Admin GraphQL client, OAuth, **API version**, and the `SHOP` constant. |
-| `lib/productMatch.ts` | `fetchAllProducts()` (returns `{ products, currencyCode, truncated }`), `fetchProductVariantIds()` (all variants of one product, used at apply time), `matchesConditions()`, `hasValidCondition()`, and the `NormalizedProduct` shape (id, title, vendor, type, tags[], collections, price, compareAtPrice, variantId — note `variantId` is the FIRST variant, for preview display only). |
+| `lib/productMatch.ts` | `fetchAllProducts()` (returns `{ products, currencyCode, truncated }`), `fetchProductVariantIds()` (all variant ids of one product), `fetchProductVariants()` (all variants with `{id, price}`, used by percentage price changes at apply time), `matchesConditions()`, `hasValidCondition()`, and the `NormalizedProduct` shape (id, title, vendor, type, tags[], collections, price, compareAtPrice, status, variantId — note `variantId` is the FIRST variant, for preview display only). |
+| `lib/googleFields.ts` | **Single source of truth for the Google / Merchant Center metafields** (`mm-google-shopping`). Lists each field's change key, filter label, metafield key, owner level (variant/product), type, and fixed options. Imported by the filter UI, changes UI, matcher, and execute route — add a new Google field here only. |
 | `lib/db.ts` | Shared Prisma client. |
 | `app/api/auth/shopify/route.ts`, `app/api/auth/callback/route.ts` | One-time OAuth install (offline token stored in DB `Session` table). |
 
@@ -88,6 +89,15 @@ wondering why nothing changes.
     The execute route has a `collectErrors()` helper that does both; reuse it.
 - **`tags`** in `ProductUpdateInput` is an array of strings. Replace overwrites all
   tags; for add/remove the route merges against `product.tags`.
+- **Google / Merchant Center fields are METAFIELDS** in the `mm-google-shopping`
+  namespace, written via **`metafieldsSet`** (`MetafieldsSetInput`: `ownerId`,
+  `namespace`, `key`, `value`, `type`). Most live on the **variant**
+  (`age_group`, `gender`, `condition`, `mpn`, `size_system`, `size_type`,
+  `custom_label_0–4`); only `custom_product` (boolean) is product-level. The
+  execute route applies variant fields to every variant and chunks `metafieldsSet`
+  to 25 inputs per call. The catalog scan reads them as `metafields(namespace:
+  "mm-google-shopping")` on the first variant + product. Field definitions are
+  centralized in `lib/googleFields.ts`.
 - Auth is a stored **offline token** in the DB `Session` table. If you ever see
   "No Shopify session", the owner re-runs the one-time connect at `/api/auth/shopify`.
 
@@ -99,11 +109,21 @@ wondering why nothing changes.
 
 ## 4b. What the app can do today
 
-- **Filters:** Collection, Tag, Title, Type, Vendor, Price with =, ≠, >, <, ≥, ≤,
-  contains, not-contains. Dropdowns are populated from real Shopify values.
+- **Filters:** Collection, Tag, Title, Type, Vendor, Price, **Compare-at price**,
+  **Status** (active/draft/archived), and the **Google / Merchant Center**
+  metafields (Age Group, Gender, Condition, MPN, Size System/Type, Custom Label
+  0–4, Custom Product) with =, ≠, >, <, ≥, ≤, contains, not-contains. Dropdowns
+  are populated from real Shopify values; Status and most Google fields are
+  fixed pick-lists.
 - **Changes:** Title (replace/append/prepend), Vendor (replace), Tags
-  (replace/add/remove), Price, Compare-at price, and **Clear compare-at price**.
-- **Multi-variant aware:** price/compare-at changes apply to every variant.
+  (replace/add/remove), Price, **Percentage price change**, Compare-at price,
+  **Clear compare-at price**, **Product status** (active/draft/archived),
+  **SEO title / description**, and the **Google / Merchant Center metafields**
+  (variant-level fields applied to every variant; `custom_product` at product
+  level).
+- **Multi-variant aware:** price/compare-at/percentage changes and Google
+  variant metafields apply to every variant. Percentage uses each variant's own
+  current price (via `fetchProductVariants()`).
 - **Safety:** Preview before Apply; an Apply shows a confirm dialog with the
   matched count; editing filters clears a stale preview; the server refuses to
   run with no real filter (would match the whole catalog).
@@ -130,7 +150,16 @@ Full findings live in `CODE_AUDIT_2026-06-09.md`.
 There is **no GitHub connector** available in this environment, so the LLM cannot
 push. The push happens from the owner's machine; the push IS the deploy.
 
-**LLM side:**
+**If the owner's local clone `~/ages-ago-manager` is connected as a Cowork
+folder** (preferred), the LLM can edit the working tree directly with
+Read/Write/Edit — no patch needed. The owner then reviews and pushes:
+```bash
+cd ~/ages-ago-manager
+git diff                 # review the LLM's edits
+git add -A && git commit -m "describe the change" && git push
+```
+
+**If the clone is NOT connected**, fall back to the patch flow:
 1. Clone fresh to inspect: `git clone --depth 1 https://github.com/bismarckbanjo/ages-ago-manager.git`
 2. Make the edits, confirm they're correct (validate GraphQL, eyeball diffs).
 3. `git diff > changes.patch` and **verify it applies** against a clean clone:

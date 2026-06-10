@@ -1,8 +1,26 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { GOOGLE_FIELDS, googleFieldByFilter } from "../../lib/googleFields";
 
-const FIELDS = ["Collection", "Tag", "Title", "Type", "Vendor", "Price"];
+const FIELDS = [
+  "Collection",
+  "Tag",
+  "Title",
+  "Type",
+  "Vendor",
+  "Price",
+  "Compare-at price",
+  "Status",
+];
+
+// Product statuses Shopify supports, offered as a fixed pick-list (matched
+// case-insensitively against the product's ACTIVE/DRAFT/ARCHIVED status).
+const STATUS_OPTIONS = [
+  { value: "active", label: "Active" },
+  { value: "draft", label: "Draft" },
+  { value: "archived", label: "Archived" },
+];
 const OPERATORS = [
   { label: "=", value: "equals" },
   { label: "=/=", value: "notEquals" },
@@ -83,7 +101,7 @@ function ValueField({
     fontSize: "14px",
   } as const;
 
-  if (field === "Price") {
+  if (field === "Price" || field === "Compare-at price") {
     return (
       <input
         type="number"
@@ -91,6 +109,54 @@ function ValueField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="0.00"
+        style={inputStyle}
+      />
+    );
+  }
+
+  if (field === "Status") {
+    return (
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ ...inputStyle, background: "white" }}
+      >
+        <option value="">Select status…</option>
+        {STATUS_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  // Google metafield fields: pick-list when the field has fixed options,
+  // otherwise free text.
+  const googleField = googleFieldByFilter(field);
+  if (googleField) {
+    if (googleField.options) {
+      return (
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          style={{ ...inputStyle, background: "white" }}
+        >
+          <option value="">Select value…</option>
+          {googleField.options.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      );
+    }
+    return (
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="value"
         style={inputStyle}
       />
     );
@@ -162,6 +228,13 @@ export function SimpleQueryBuilder({ conditions, onChange }: SimpleQueryBuilderP
                 {f}
               </option>
             ))}
+            <optgroup label="Google / Merchant Center">
+              {GOOGLE_FIELDS.map((g) => (
+                <option key={g.filterField} value={g.filterField}>
+                  {g.filterField}
+                </option>
+              ))}
+            </optgroup>
           </select>
 
           <select

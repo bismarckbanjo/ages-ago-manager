@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { SimpleQueryBuilder } from "../components/SimpleQueryBuilder";
 import { SimpleChangesBuilder } from "../components/SimpleChangesBuilder";
+import { GOOGLE_FIELDS } from "../../lib/googleFields";
 
 interface Condition {
   field: string;
@@ -103,10 +104,21 @@ export default function Dashboard() {
       return;
     }
 
-    const valueFields = ["title", "vendor", "tags", "price", "compareAtPrice"];
+    const valueFields = [
+      "title",
+      "vendor",
+      "tags",
+      "price",
+      "pricePercent",
+      "compareAtPrice",
+      "status",
+      "seoTitle",
+      "seoDescription",
+    ];
     const hasChange =
       valueFields.some((k) => changes[k]) ||
-      changes.compareAtPriceClear === "true";
+      changes.compareAtPriceClear === "true" ||
+      GOOGLE_FIELDS.some((g) => changes[g.changeKey]);
     if (!hasChange) {
       setError("Please select at least one change to apply");
       return;
