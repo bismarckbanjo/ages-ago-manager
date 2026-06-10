@@ -2,10 +2,10 @@
 // ready to run. Runs at build (after `prisma db push`). NEVER throws — a seed
 // failure must not break the deploy (it exits 0 either way).
 //
-// Behaviour: creates each template only if a job with that (shop, name) doesn't
-// already exist (`update: {}`), so a job the owner has edited or is keeping is
-// never overwritten. A template the owner DELETES will reappear on the next
-// deploy; to keep it gone, edit it instead of deleting, or remove it here.
+// Behaviour: the templates are AUTHORITATIVE — each deploy upserts them so a fix
+// here (e.g. a corrected Google taxonomy path) reaches the existing job. Editing
+// a template in the app is therefore reset on the next deploy; to customize, use
+// "Save Job" under a different name. A deleted template also reappears on deploy.
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -54,7 +54,7 @@ const templates = [
       googleCustomProduct: "true",
       googleBrand: "Ages Ago Apparel",
       googleProductType:
-        "Arts & Entertainment > Hobbies & Creative Arts > Decorative Stickers",
+        "Arts & Entertainment > Hobbies & Creative Arts > Arts & Crafts > Art & Crafting Materials > Embellishments & Trims > Decorative Stickers",
     },
   },
 ];
@@ -71,7 +71,15 @@ async function main() {
         changes: JSON.stringify(t.changes),
         isActive: true,
       },
-      update: {}, // never overwrite an existing (possibly owner-edited) job
+      // Templates are authoritative: re-sync their definition on every deploy so
+      // fixes here (e.g. a corrected Google taxonomy path) reach existing jobs.
+      // To make a custom variant, use "Save Job" under a different name instead
+      // of editing a template in place (an in-place edit is reset on deploy).
+      update: {
+        description: t.description,
+        filters: JSON.stringify(t.filters),
+        changes: JSON.stringify(t.changes),
+      },
     });
     console.log(`[seedTemplates] ensured: ${t.name}`);
   }
