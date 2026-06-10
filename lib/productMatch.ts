@@ -42,7 +42,7 @@ const PRODUCTS_PAGE_QUERY = `#graphql
           status
           tags
           collections(first: 50) { edges { node { title handle } } }
-          metafields(namespace: "${GOOGLE_NAMESPACE}", first: 5) { edges { node { key value } } }
+          metafields(namespace: "${GOOGLE_NAMESPACE}", first: 25) { edges { node { key value } } }
           variants(first: 1) {
             edges {
               node {

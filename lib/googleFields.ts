@@ -2,9 +2,12 @@
 // ("mm-google-shopping" namespace). These power Google Shopping / Merchant
 // Center listings; without them some products can't be advertised.
 //
-// Most fields live on the VARIANT (age group, gender, size, custom labels, ...)
-// and are applied to EVERY variant of a matched product. `custom_product` is the
-// only PRODUCT-level field.
+// These are written at the PRODUCT level. For this store every product is
+// unisex/adult and Google allows gender/age_group/size_system/size_type at the
+// product (item-group) level, so product-level writes are correct AND far
+// cheaper than touching every variant. (color/size remain intrinsic variant
+// metafields and are not managed here.) The `level` field is kept on each entry
+// so a variant-level field could be added later if ever needed.
 //
 // This config is imported by:
 //   - the filter UI (SimpleQueryBuilder) and matcher (productMatch.ts)
@@ -36,7 +39,7 @@ export const GOOGLE_FIELDS: GoogleField[] = [
     filterField: "Google: Age Group",
     label: "Age Group",
     metafieldKey: "age_group",
-    level: "variant",
+    level: "product",
     metafieldType: "single_line_text_field",
     options: ["newborn", "infant", "toddler", "kids", "adult"],
   },
@@ -45,7 +48,7 @@ export const GOOGLE_FIELDS: GoogleField[] = [
     filterField: "Google: Gender",
     label: "Gender",
     metafieldKey: "gender",
-    level: "variant",
+    level: "product",
     metafieldType: "single_line_text_field",
     options: ["male", "female", "unisex"],
   },
@@ -54,7 +57,7 @@ export const GOOGLE_FIELDS: GoogleField[] = [
     filterField: "Google: Condition",
     label: "Condition",
     metafieldKey: "condition",
-    level: "variant",
+    level: "product",
     metafieldType: "single_line_text_field",
     options: ["new", "refurbished", "used"],
   },
@@ -63,7 +66,7 @@ export const GOOGLE_FIELDS: GoogleField[] = [
     filterField: "Google: MPN",
     label: "MPN",
     metafieldKey: "mpn",
-    level: "variant",
+    level: "product",
     metafieldType: "single_line_text_field",
   },
   {
@@ -71,7 +74,7 @@ export const GOOGLE_FIELDS: GoogleField[] = [
     filterField: "Google: Size System",
     label: "Size System",
     metafieldKey: "size_system",
-    level: "variant",
+    level: "product",
     metafieldType: "single_line_text_field",
     options: ["US", "UK", "EU", "AU", "BR", "CN", "FR", "DE", "IT", "JP", "MEX"],
   },
@@ -80,7 +83,7 @@ export const GOOGLE_FIELDS: GoogleField[] = [
     filterField: "Google: Size Type",
     label: "Size Type",
     metafieldKey: "size_type",
-    level: "variant",
+    level: "product",
     metafieldType: "single_line_text_field",
     options: ["regular", "petite", "plus", "tall", "big", "maternity"],
   },
@@ -89,7 +92,7 @@ export const GOOGLE_FIELDS: GoogleField[] = [
     filterField: "Google: Custom Label 0",
     label: "Custom Label 0",
     metafieldKey: "custom_label_0",
-    level: "variant",
+    level: "product",
     metafieldType: "single_line_text_field",
   },
   {
@@ -97,7 +100,7 @@ export const GOOGLE_FIELDS: GoogleField[] = [
     filterField: "Google: Custom Label 1",
     label: "Custom Label 1",
     metafieldKey: "custom_label_1",
-    level: "variant",
+    level: "product",
     metafieldType: "single_line_text_field",
   },
   {
@@ -105,7 +108,7 @@ export const GOOGLE_FIELDS: GoogleField[] = [
     filterField: "Google: Custom Label 2",
     label: "Custom Label 2",
     metafieldKey: "custom_label_2",
-    level: "variant",
+    level: "product",
     metafieldType: "single_line_text_field",
   },
   {
@@ -113,7 +116,7 @@ export const GOOGLE_FIELDS: GoogleField[] = [
     filterField: "Google: Custom Label 3",
     label: "Custom Label 3",
     metafieldKey: "custom_label_3",
-    level: "variant",
+    level: "product",
     metafieldType: "single_line_text_field",
   },
   {
@@ -121,7 +124,7 @@ export const GOOGLE_FIELDS: GoogleField[] = [
     filterField: "Google: Custom Label 4",
     label: "Custom Label 4",
     metafieldKey: "custom_label_4",
-    level: "variant",
+    level: "product",
     metafieldType: "single_line_text_field",
   },
   {
@@ -133,7 +136,29 @@ export const GOOGLE_FIELDS: GoogleField[] = [
     metafieldType: "boolean",
     options: ["true", "false"],
   },
+  {
+    changeKey: "googleBrand",
+    filterField: "Google: Brand",
+    label: "Brand",
+    metafieldKey: "brand",
+    level: "product",
+    metafieldType: "single_line_text_field",
+  },
+  {
+    changeKey: "googleProductType",
+    filterField: "Google: Product Type",
+    label: "Product Type",
+    metafieldKey: "product_type",
+    level: "product",
+    metafieldType: "single_line_text_field",
+  },
 ];
+
+// NOTE: google_product_category is intentionally NOT here. On this store it was
+// created by the Google channel with the LEGACY metafield type `string`, which
+// metafieldsSet cannot overwrite (it only accepts current types like
+// single_line_text_field). Setting it would error on a type conflict. The few
+// mis-categorized stickers must be fixed another way (e.g. Shopify admin).
 
 /** Look up a Google field by its filter dropdown label (case-insensitive). */
 export function googleFieldByFilter(field: string): GoogleField | undefined {

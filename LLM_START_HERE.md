@@ -26,7 +26,7 @@ Single user, single store. Not a public Shopify app.
 | Hosting | Vercel project **ages-ago-manager** (team: *mrmichaellast-4427's projects*) |
 | Live URL | `https://ages-ago-manager.vercel.app` -> `/dashboard` is the app |
 | Deploy trigger | **Auto-deploys on every push to `main`** |
-| Database | Neon Postgres via Prisma. `prisma db push` runs at build. |
+| Database | Neon Postgres via Prisma. `prisma db push` then `node prisma/seedTemplates.mjs` run at build. |
 | Shopify store | `1kfpgz-ex.myshopify.com` -- admin: `https://admin.shopify.com/store/1kfpgz-ex` |
 
 **Stack:** Next.js (App Router, `app/` dir) - Node 24 - React (client components) -
@@ -42,16 +42,19 @@ Start with these. **The live "apply" logic is the route file, not the services.*
 
 | File | Role |
 | --- | --- |
-| `app/dashboard/page.tsx` | Main UI: procedure name, filters, changes, Preview, Apply, results, "Back to Shopify Admin" link. |
+| `app/dashboard/page.tsx` | Main UI: **Saved Jobs panel (Run/Load/Delete)** at top, procedure name, filters, changes, Preview, Apply, **Save Job**, results, Run History, "Back to Shopify Admin" link. |
 | `app/components/SimpleQueryBuilder.tsx` | The **Filters** UI (conditions). |
 | `app/components/SimpleChangesBuilder.tsx` | The **Changes** UI: title (Replace/Append/Prepend), price, compare-at, vendor, tags (Replace/Add/Remove). Modes are stored as `<field>Mode` keys. |
 | `app/api/products/preview/route.ts` | Preview endpoint -- returns count + sample of matched products. |
 | `app/api/procedures/execute/route.ts` | **The Apply endpoint. This is the core.** Filters the catalog, runs the Shopify mutations (multi-variant aware), records a `ProcedureExecution`, and retries on throttling. |
 | `app/api/filter-values/route.ts` | Populates the filter dropdowns with real values pulled from Shopify. |
-| `app/api/procedures/history/route.ts` | Saved procedures + their recent executions (JSON; rendered by the Run History panel on the dashboard). |
+| `app/api/procedures/history/route.ts` | Saved procedures (incl. `filters`/`changes`) + recent executions. Powers both the Saved Jobs panel and Run History. |
+| `app/api/procedures/save/route.ts` | Save a job (upsert `Procedure`) **without** running it. Used by the Save Job button. |
+| `app/api/procedures/delete/route.ts` | Delete a saved job by id (shop-scoped, cascades executions). |
+| `prisma/seedTemplates.mjs` | Build-time idempotent seed of the 3 template jobs (`Google: T-Shirts/Hoodies/Stickers`). Runs in the build script after `prisma db push`; `update: {}` so it never overwrites edited jobs. |
 | `lib/shopify.ts` | Admin GraphQL client, OAuth, **API version**, and the `SHOP` constant. |
 | `lib/productMatch.ts` | `fetchAllProducts()` (returns `{ products, currencyCode, truncated }`), `fetchProductVariantIds()` (all variant ids of one product), `fetchProductVariants()` (all variants with `{id, price}`, used by percentage price changes at apply time), `matchesConditions()`, `hasValidCondition()`, and the `NormalizedProduct` shape (id, title, vendor, type, tags[], collections, price, compareAtPrice, status, variantId — note `variantId` is the FIRST variant, for preview display only). |
-| `lib/googleFields.ts` | **Single source of truth for the Google / Merchant Center metafields** (`mm-google-shopping`). Lists each field's change key, filter label, metafield key, owner level (variant/product), type, and fixed options. Imported by the filter UI, changes UI, matcher, and execute route — add a new Google field here only. |
+| `lib/googleFields.ts` | **Single source of truth for the Google / Merchant Center metafields** (`mm-google-shopping`). Each field's change key, filter label, metafield key, level, type, options. Includes `brand` + `product_type`; **all fields are product-level**. `google_product_category` is intentionally absent (legacy `string` type can't be overwritten by `metafieldsSet`). Imported by the filter UI, changes UI, matcher, and execute route — add a new Google field here only. |
 | `lib/db.ts` | Shared Prisma client. |
 | `app/api/auth/shopify/route.ts`, `app/api/auth/callback/route.ts` | One-time OAuth install (offline token stored in DB `Session` table). |
 
@@ -130,6 +133,12 @@ wondering why nothing changes.
 - **Run History:** every Apply writes a `ProcedureExecution` (matched / updated /
   failed + errors) and sets `Procedure.lastExecutedAt`. The dashboard has a Run
   History panel that reads `/api/procedures/history`.
+- **Saved Jobs:** procedures are saved on Apply (and via the **Save Job** button,
+  which saves without running). The **Saved Jobs** panel at the top of the
+  dashboard can **Run** (preview count → confirm → apply), **Load** (into the
+  editor), or **Delete** any saved job. Three template jobs ship seeded:
+  `Google: T-Shirts`, `Google: Hoodies`, `Google: Stickers` (apply the
+  per-type `mm-google-shopping` field set; see `prisma/seedTemplates.mjs`).
 - **Throttle handling:** mutations retry with backoff on Shopify `THROTTLED`.
 - **Catalog scan** is capped at 10,000 products; preview/results surface a
   `truncated` warning if the cap is ever hit (current catalog is ~422).

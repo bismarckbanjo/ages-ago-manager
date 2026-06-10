@@ -5,6 +5,36 @@
 > Next.js; the apply path is `app/api/procedures/execute/route.ts`. See
 > `LLM_START_HERE.md`.
 
+## 2026-06-09 (Saved Jobs + Google brand/product_type — Next.js app)
+
+- **Saved Jobs on the dashboard.** A "Saved Jobs" panel now sits at the top of
+  `/dashboard`. Each saved procedure has **Run** (previews the match count, then
+  confirms before applying), **Load** (opens it in the editor), and **Delete**.
+  A new **Save Job** button stores the current filters+changes without running.
+  - New endpoints: `app/api/procedures/save/route.ts` (upsert, no Shopify
+    writes) and `app/api/procedures/delete/route.ts` (delete by id, shop-scoped).
+  - Procedures already store `filters`/`changes` (the history endpoint returns
+    them); the dashboard parses them (`parseDef`) for run/load.
+- **Three template jobs auto-seeded:** `Google: T-Shirts`, `Google: Hoodies`,
+  `Google: Stickers`. `prisma/seedTemplates.mjs` runs at build (after
+  `prisma db push`), idempotent and non-throwing, `update: {}` so it never
+  overwrites an owner-edited job. (A deleted template reappears on next deploy.)
+- **Google field config extended** (`lib/googleFields.ts`):
+  - Added `brand` and `product_type` (product-level, `single_line_text_field`).
+  - **All Google fields are now product-level** (gender/age_group/size_system/
+    size_type are valid at the product/item-group level and far cheaper than
+    writing every variant; this store is uniformly unisex/adult). `color`/`size`
+    remain intrinsic variant metafields, not managed here.
+  - `google_product_category` is deliberately excluded: on this store it has the
+    **legacy `string` metafield type**, which `metafieldsSet` can't overwrite.
+    The 7 mis-categorized stickers (on `212` instead of `4054`) must be fixed in
+    Shopify admin or via a `metafieldDelete` + recreate.
+  - Catalog scan now reads product Google metafields at `first: 25` (was 5) so
+    filtering on any Google field is reliable.
+- Audit/reference deliverables (in the owner's project folder, not the repo):
+  `google-metadata-audit.csv` (all 422 products) and `google-metadata-template.md`
+  (the per-type field map).
+
 ## 2026-06-09 (New filters & change actions — Next.js app)
 
 - **New filters:** **Status** (active/draft/archived, fixed pick-list) and

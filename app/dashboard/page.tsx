@@ -177,6 +177,159 @@ export default function Dashboard() {
     }
   };
 
+  // Saved jobs store filters/changes as JSON (sometimes stringified). Parse back.
+  const parseDef = (v: any) => {
+    if (v == null) return v;
+    if (typeof v === "string") {
+      try {
+        return JSON.parse(v);
+      } catch {
+        return v;
+      }
+    }
+    return v;
+  };
+
+  // Save the current builder as a re-runnable job (no Shopify writes).
+  const handleSaveJob = async () => {
+    if (!procedureName.trim()) {
+      setError("Enter a job name to save");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/procedures/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: procedureName, conditions, changes }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Saved job "${data.name}". You can run it from Saved Jobs at the top.`);
+        loadHistory();
+      } else {
+        setError(data.error || "Failed to save job");
+      }
+    } catch (err) {
+      setError("Failed to save job");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load a saved job's filters/changes into the builder for editing.
+  const handleLoadJob = (proc: any) => {
+    const conds = parseDef(proc.filters);
+    const chg = parseDef(proc.changes);
+    setProcedureName(proc.name || "");
+    setConditions(
+      Array.isArray(conds) && conds.length
+        ? conds
+        : [{ field: "", operator: "equals", value: "" }]
+    );
+    setChanges(chg && typeof chg === "object" ? chg : {});
+    setPreview(null);
+    setError("");
+    if (typeof window !== "undefined")
+      window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Run a saved job: preview the match count, confirm, then apply to the store.
+  const handleRunJob = async (proc: any) => {
+    const conds = parseDef(proc.filters);
+    const chg = parseDef(proc.changes);
+    if (!Array.isArray(conds) || conds.length === 0) {
+      setError(`Job "${proc.name}" has no saved filter.`);
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      const pv = await fetch("/api/products/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conditions: conds }),
+      });
+      const pdata = await pv.json();
+      const count = pdata?.matched ?? 0;
+      const ok = window.confirm(
+        `"${proc.name}" matches ${count} product${count === 1 ? "" : "s"}.\n\n` +
+          `Apply this job to the live Shopify store? This cannot be undone.`
+      );
+      if (!ok) {
+        setLoading(false);
+        return;
+      }
+      const res = await fetch("/api/procedures/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: proc.name, conditions: conds, changes: chg }),
+      });
+      const result = await res.json();
+      if (result.success) {
+        let message = `"${proc.name}": updated ${result.updated} product${
+          result.updated === 1 ? "" : "s"
+        }`;
+        if (result.failed) {
+          message += `, ${result.failed} failed`;
+          if (result.errors && result.errors.length > 0) {
+            message += `:\n\n${result.errors.join("\n")}`;
+          }
+        }
+        if (result.truncated) {
+          message +=
+            "\n\nNote: the catalog is larger than the scan limit, so some products may not have been considered.";
+        }
+        alert(message);
+        loadHistory();
+      } else {
+        setError(result.error || "Failed to run job");
+      }
+    } catch (err) {
+      setError("Failed to run job");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteJob = async (proc: any) => {
+    const ok = window.confirm(
+      `Delete saved job "${proc.name}"? This removes the job and its run history.`
+    );
+    if (!ok) return;
+    setLoading(true);
+    try {
+      const res = await fetch("/api/procedures/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: proc.id }),
+      });
+      const data = await res.json();
+      if (!data.success) setError(data.error || "Failed to delete job");
+      loadHistory();
+    } catch (err) {
+      setError("Failed to delete job");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const jobBtn = (bg: string) =>
+    ({
+      padding: "6px 14px",
+      background: loading ? "#ccc" : bg,
+      color: "white",
+      border: "none",
+      borderRadius: "4px",
+      cursor: loading ? "not-allowed" : "pointer",
+      fontSize: "13px",
+      fontWeight: "bold",
+    }) as const;
+
   return (
     <div style={{ maxWidth: "900px", margin: "0 auto", padding: "40px 20px" }}>
       <div
@@ -202,6 +355,73 @@ export default function Dashboard() {
       </div>
 
       <div style={{ marginTop: "40px" }}>
+        {/* Saved Jobs — run/re-run stored procedures straight from the top. */}
+        {history.length > 0 && (
+          <div
+            style={{
+              marginBottom: "32px",
+              border: "1px solid #e3e3e3",
+              borderRadius: "8px",
+              padding: "16px 18px",
+              background: "#fafbff",
+            }}
+          >
+            <h3 style={{ margin: "0 0 8px" }}>Saved Jobs</h3>
+            <p style={{ fontSize: "12px", color: "#888", margin: "0 0 8px" }}>
+              Run previews the match count first, then asks you to confirm before
+              changing the live store. Load opens a job in the editor below.
+            </p>
+            <div>
+              {history.map((proc: any) => (
+                <div
+                  key={proc.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    padding: "10px 0",
+                    borderTop: "1px solid #eee",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <strong style={{ fontSize: "14px" }}>{proc.name}</strong>
+                    <span
+                      style={{ fontSize: "12px", color: "#888", marginLeft: "8px" }}
+                    >
+                      Last run: {formatWhen(proc.lastExecutedAt)}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      onClick={() => handleRunJob(proc)}
+                      disabled={loading}
+                      style={jobBtn("#28a745")}
+                    >
+                      Run
+                    </button>
+                    <button
+                      onClick={() => handleLoadJob(proc)}
+                      disabled={loading}
+                      style={jobBtn("#0070f3")}
+                    >
+                      Load
+                    </button>
+                    <button
+                      onClick={() => handleDeleteJob(proc)}
+                      disabled={loading}
+                      style={jobBtn("#b0b0b0")}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div style={{ marginBottom: "30px" }}>
           <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "bold" }}>
             Procedure Name
@@ -279,6 +499,23 @@ export default function Dashboard() {
             }}
           >
             Apply Changes
+          </button>
+          <button
+            onClick={handleSaveJob}
+            disabled={loading}
+            title="Save the current filters + changes as a re-runnable job"
+            style={{
+              padding: "12px 24px",
+              background: loading ? "#ccc" : "white",
+              color: "#0070f3",
+              border: "1px solid #0070f3",
+              borderRadius: "4px",
+              cursor: loading ? "not-allowed" : "pointer",
+              fontSize: "14px",
+              fontWeight: "bold",
+            }}
+          >
+            Save Job
           </button>
         </div>
 
