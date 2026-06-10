@@ -27,13 +27,26 @@ export interface GoogleField {
   metafieldKey: string;
   /** Where the metafield lives. */
   level: "variant" | "product";
-  /** Shopify metafield type. */
-  metafieldType: "single_line_text_field" | "boolean";
+  /** Shopify metafield type. `string` is the legacy type used by the Google
+   *  channel for google_product_category; metafieldsSet accepts it for writes. */
+  metafieldType: "single_line_text_field" | "boolean" | "string";
   /** Optional fixed pick-list of allowed values (otherwise free text). */
   options?: string[];
 }
 
 export const GOOGLE_FIELDS: GoogleField[] = [
+  {
+    // The numeric Google taxonomy ID (e.g. 212 = Shirts & Tops, 4054 =
+    // Decorative Stickers). Stored with the legacy `string` metafield type, which
+    // metafieldsSet can still write. Look up IDs in Google's taxonomy file:
+    // https://www.google.com/basepages/producttype/taxonomy-with-ids.en-US.txt
+    changeKey: "googleProductCategory",
+    filterField: "Google: Product Category",
+    label: "Product Category (Google ID, e.g. 212 / 4054)",
+    metafieldKey: "google_product_category",
+    level: "product",
+    metafieldType: "string",
+  },
   {
     changeKey: "googleAgeGroup",
     filterField: "Google: Age Group",
@@ -153,12 +166,6 @@ export const GOOGLE_FIELDS: GoogleField[] = [
     metafieldType: "single_line_text_field",
   },
 ];
-
-// NOTE: google_product_category is intentionally NOT here. On this store it was
-// created by the Google channel with the LEGACY metafield type `string`, which
-// metafieldsSet cannot overwrite (it only accepts current types like
-// single_line_text_field). Setting it would error on a type conflict. The few
-// mis-categorized stickers must be fixed another way (e.g. Shopify admin).
 
 /** Look up a Google field by its filter dropdown label (case-insensitive). */
 export function googleFieldByFilter(field: string): GoogleField | undefined {

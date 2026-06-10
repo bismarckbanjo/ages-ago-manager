@@ -5,6 +5,19 @@
 > Next.js; the apply path is `app/api/procedures/execute/route.ts`. See
 > `LLM_START_HERE.md`.
 
+## 2026-06-09 (google_product_category is now settable — Next.js app)
+
+- Verified `metafieldsSet` **accepts the legacy `string` metafield type**, so the
+  earlier assumption that `google_product_category` couldn't be bulk-set was
+  wrong. Added it to `lib/googleFields.ts` (changeKey `googleProductCategory`,
+  `metafieldType: "string"`, product-level) — now filterable and settable like
+  the other Google fields.
+- The seeded templates now set the category too: `Google: T-Shirts`/`Hoodies`
+  set `212`, `Google: Stickers` sets `4054` — so re-running a job self-heals any
+  mis-categorized product. (One-off: the 7 stickers that were on `212` were
+  already corrected to `4054` directly via `metafieldsSet`.)
+- Corrected the now-false "category can't be set" notes in the code and docs.
+
 ## 2026-06-09 (Saved Jobs + Google brand/product_type — Next.js app)
 
 - **Saved Jobs on the dashboard.** A "Saved Jobs" panel now sits at the top of

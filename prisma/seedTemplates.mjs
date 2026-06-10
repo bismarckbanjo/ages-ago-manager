@@ -15,9 +15,8 @@ const SHOP = (process.env.SHOPIFY_SHOP || "1kfpgz-ex.myshopify.com")
   .replace(/\/+$/, "");
 
 // Full Google / Merchant Center field set for apparel (T-Shirts + Hoodies).
-// google_product_category is intentionally omitted (legacy `string` metafield
-// type can't be overwritten by metafieldsSet — see lib/googleFields.ts).
 const APPAREL_CHANGES = {
+  googleProductCategory: "212", // Apparel & Accessories > Clothing > Shirts & Tops
   googleGender: "unisex",
   googleAgeGroup: "adult",
   googleCondition: "new",
@@ -50,6 +49,7 @@ const templates = [
     // Shopify productType for the die-cut stickers is "Paper products".
     filters: [{ field: "Type", operator: "equals", value: "Paper products" }],
     changes: {
+      googleProductCategory: "4054", // Decorative Stickers
       googleCondition: "new",
       googleCustomProduct: "true",
       googleBrand: "Ages Ago Apparel",
